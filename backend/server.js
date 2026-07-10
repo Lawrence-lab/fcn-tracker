@@ -19,6 +19,70 @@ app.use(express.json());
 const priceCache = new Map();
 const CACHE_DURATION_MS = 3 * 60 * 1000; // 3 minutes cache
 
+// Fallback helper to fetch price from Nasdaq API (works in datacenter environments)
+async function getStockPriceNasdaq(symbol) {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  try {
+    const url = `https://api.nasdaq.com/api/quote/${encodeURIComponent(normalizedSymbol)}/info?assetclass=stocks`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Nasdaq HTTP error ${response.status}`);
+    }
+
+    const data = await response.json();
+    const primary = data?.data?.primaryData;
+    const secondary = data?.data?.secondaryData;
+    
+    if (!primary || !primary.lastSalePrice) {
+      throw new Error('Stock not found on Nasdaq or invalid format');
+    }
+
+    // Parse price (e.g. "$436.96" -> 436.96)
+    const priceStr = primary.lastSalePrice.replace('$', '').replace(/,/g, '').trim();
+    const price = parseFloat(priceStr);
+    
+    if (isNaN(price)) {
+      throw new Error('Invalid price parsed from Nasdaq');
+    }
+
+    let prevClose = price;
+    if (secondary && secondary.lastSalePrice) {
+      const secPriceStr = secondary.lastSalePrice.replace('$', '').replace(/,/g, '').trim();
+      const secPrice = parseFloat(secPriceStr);
+      if (!isNaN(secPrice)) {
+        const netChangeStr = secondary.netChange ? secondary.netChange.replace('+', '').trim() : '0';
+        const netChange = parseFloat(netChangeStr);
+        if (!isNaN(netChange)) {
+          prevClose = secPrice - netChange;
+        } else {
+          prevClose = secPrice;
+        }
+      }
+    }
+
+    const name = data?.data?.companyName || normalizedSymbol;
+    const currency = 'USD';
+
+    return {
+      price,
+      prevClose,
+      name,
+      currency,
+      updatedAt: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error(`Error fetching Nasdaq data for ${symbol}:`, error.message);
+    throw error;
+  }
+}
+
 // Helper to fetch price from Yahoo Finance
 async function getStockPrice(symbol) {
   const normalizedSymbol = symbol.trim().toUpperCase();
@@ -68,11 +132,22 @@ async function getStockPrice(symbol) {
 
     return stockInfo;
   } catch (error) {
-    console.error(`Error fetching Yahoo Finance data for ${symbol}:`, error.message);
-    if (cached) {
-      return cached.data; // Fallback to stale cache if API error
+    console.warn(`Yahoo Finance fetch failed for ${symbol}, trying Nasdaq API fallback:`, error.message);
+    
+    try {
+      const stockInfo = await getStockPriceNasdaq(symbol);
+      priceCache.set(normalizedSymbol, {
+        timestamp: now,
+        data: stockInfo
+      });
+      return stockInfo;
+    } catch (nasdaqError) {
+      console.error(`Nasdaq fallback also failed for ${symbol}:`, nasdaqError.message);
+      if (cached) {
+        return cached.data; // Fallback to stale cache if both fail
+      }
+      throw nasdaqError;
     }
-    throw error;
   }
 }
 
