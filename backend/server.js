@@ -173,6 +173,36 @@ async function writeFCNDb(data) {
 }
 
 // REST APIs
+// 0. Get real-time USD to TWD exchange rate (cached for 1 hour)
+let exchangeRateCache = {
+  USDTWD: 32.2,
+  timestamp: 0
+};
+const EX_CACHE_DURATION = 60 * 60 * 1000;
+
+app.get('/api/exchange-rate', async (req, res) => {
+  const now = Date.now();
+  if (now - exchangeRateCache.timestamp < EX_CACHE_DURATION) {
+    return res.json(exchangeRateCache);
+  }
+  try {
+    const response = await fetch('https://open.er-api.com/v6/latest/USD');
+    if (response.ok) {
+      const data = await response.json();
+      if (data?.rates?.TWD) {
+        exchangeRateCache = {
+          USDTWD: data.rates.TWD,
+          timestamp: now
+        };
+      }
+    }
+    res.json(exchangeRateCache);
+  } catch (error) {
+    console.error('Error fetching exchange rate:', error.message);
+    res.json(exchangeRateCache); // fallback
+  }
+});
+
 // 1. Get all FCNs with dynamic stock prices
 app.get('/api/fcns', async (req, res) => {
   try {

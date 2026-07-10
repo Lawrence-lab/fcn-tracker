@@ -1,7 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function InterestCalendar({ fcns }) {
   const [filterCurrency, setFilterCurrency] = useState('ALL');
+  const [usdToTwd, setUsdToTwd] = useState(32.2); // Default fallback rate
+
+  useEffect(() => {
+    fetch('/api/exchange-rate')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.USDTWD) {
+          setUsdToTwd(data.USDTWD);
+        }
+      })
+      .catch(err => console.error('Failed to fetch exchange rate:', err));
+  }, []);
 
   const activeFcns = fcns.filter(item => item.status === 'Active');
 
@@ -135,6 +147,8 @@ export default function InterestCalendar({ fcns }) {
     return acc;
   }, { USD: 0, TWD: 0 });
 
+  const combinedTwdTotal = grandTotals.TWD + (grandTotals.USD * usdToTwd);
+
   const formatCurrency = (val, cur) => {
     return new Intl.NumberFormat(cur === 'TWD' ? 'zh-TW' : 'en-US', {
       style: 'currency',
@@ -152,7 +166,10 @@ export default function InterestCalendar({ fcns }) {
     <div className="interest-calendar-container">
       <div className="fcn-section-header">
         <h2 className="fcn-section-title">預期配息利息收入行事曆</h2>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginRight: '0.5rem' }}>
+            參考匯率：1 USD = {usdToTwd.toFixed(2)} TWD
+          </span>
           <button 
             className={`action-btn ${filterCurrency === 'ALL' ? 'edit' : 'btn-secondary'}`}
             style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
@@ -178,13 +195,13 @@ export default function InterestCalendar({ fcns }) {
       </div>
 
       {/* Summary Cards */}
-      <div className="dashboard-grid" style={{ marginBottom: '2rem' }}>
+      <div className="dashboard-grid" style={{ marginBottom: '2rem', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
         <div className="glass-card stat-card success">
           <span className="stat-label">預估累計美元利息 (USD)</span>
           <span className="stat-value" style={{ fontSize: '1.6rem', color: 'var(--color-success)' }}>
             {formatCurrency(grandTotals.USD, 'USD')}
           </span>
-          <span className="stat-value-sub">基於目前所有 Active 商品持有至到期之假設</span>
+          <span className="stat-value-sub">各合約原始美金收益加總</span>
         </div>
 
         <div className="glass-card stat-card success">
@@ -192,7 +209,15 @@ export default function InterestCalendar({ fcns }) {
           <span className="stat-value" style={{ fontSize: '1.6rem', color: 'var(--color-success)' }}>
             {formatCurrency(grandTotals.TWD, 'TWD')}
           </span>
-          <span className="stat-value-sub">基於目前所有 Active 商品持有至到期之假設</span>
+          <span className="stat-value-sub">各合約原始台幣收益加總</span>
+        </div>
+
+        <div className="glass-card stat-card success" style={{ borderLeft: '4px solid #8b5cf6' }}>
+          <span className="stat-label" style={{ color: '#c084fc' }}>合併預估總收益 (折合台幣)</span>
+          <span className="stat-value" style={{ fontSize: '1.6rem', color: '#c084fc' }}>
+            {formatCurrency(combinedTwdTotal, 'TWD')}
+          </span>
+          <span className="stat-value-sub">USD 按 1:{usdToTwd.toFixed(2)} 匯率折算台幣後加總</span>
         </div>
       </div>
 
@@ -205,21 +230,35 @@ export default function InterestCalendar({ fcns }) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           {filteredMonths.map((group) => {
+            const combinedMonthlyTwd = group.totals.TWD + (group.totals.USD * usdToTwd);
             return (
               <div key={group.month} className="glass-card" style={{ padding: '1.25rem', borderLeft: '4px solid var(--color-primary)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                   <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>
                     📅 {formatMonthTitle(group.month)}
                   </h3>
-                  <div style={{ display: 'flex', gap: '1rem', fontSize: '0.9rem', fontWeight: 600 }}>
-                    {(filterCurrency === 'ALL' || filterCurrency === 'USD') && group.totals.USD > 0 && (
-                      <span style={{ color: 'var(--color-success)' }}>
-                        月配息小計 (USD): {formatCurrency(group.totals.USD, 'USD')}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem' }}>
+                    <div style={{ display: 'flex', gap: '1rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                      {group.totals.USD > 0 && (
+                        <span>USD: {formatCurrency(group.totals.USD, 'USD')}</span>
+                      )}
+                      {group.totals.TWD > 0 && (
+                        <span>TWD: {formatCurrency(group.totals.TWD, 'TWD')}</span>
+                      )}
+                    </div>
+                    {filterCurrency === 'ALL' && (
+                      <span style={{ fontSize: '0.95rem', fontWeight: 600, color: '#c084fc' }}>
+                        月配息折合台幣小計: {formatCurrency(combinedMonthlyTwd, 'TWD')}
                       </span>
                     )}
-                    {(filterCurrency === 'ALL' || filterCurrency === 'TWD') && group.totals.TWD > 0 && (
-                      <span style={{ color: 'var(--color-success)' }}>
-                        月配息小計 (TWD): {formatCurrency(group.totals.TWD, 'TWD')}
+                    {filterCurrency === 'USD' && (
+                      <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--color-success)' }}>
+                        月配息小計: {formatCurrency(group.totals.USD, 'USD')}
+                      </span>
+                    )}
+                    {filterCurrency === 'TWD' && (
+                      <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--color-success)' }}>
+                        月配息小計: {formatCurrency(group.totals.TWD, 'TWD')}
                       </span>
                     )}
                   </div>
@@ -234,25 +273,32 @@ export default function InterestCalendar({ fcns }) {
                         <th style={{ padding: '0.6rem 1rem' }}>約定配息日期</th>
                         <th style={{ padding: '0.6rem 1rem' }}>幣別</th>
                         <th style={{ padding: '0.6rem 1rem', textAlign: 'right' }}>本期預估利息</th>
+                        <th style={{ padding: '0.6rem 1rem', textAlign: 'right' }}>折合台幣 (TWD)</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {group.payments.map((pay, idx) => (
-                        <tr key={`${pay.fcnId}-${idx}`}>
-                          <td style={{ padding: '0.6rem 1rem', fontWeight: 600 }}>
-                            {pay.fcnName}
-                          </td>
-                          <td style={{ padding: '0.6rem 1rem' }}>
-                            {pay.dateStr || '估計日'}
-                          </td>
-                          <td style={{ padding: '0.6rem 1rem' }}>
-                            <span className="stock-ticker-badge">{pay.currency}</span>
-                          </td>
-                          <td style={{ padding: '0.6rem 1rem', textAlign: 'right', color: 'var(--color-success)', fontWeight: 600 }}>
-                            {formatCurrency(pay.amount, pay.currency)}
-                          </td>
-                        </tr>
-                      ))}
+                      {group.payments.map((pay, idx) => {
+                        const convertedTwd = pay.currency === 'TWD' ? pay.amount : pay.amount * usdToTwd;
+                        return (
+                          <tr key={`${pay.fcnId}-${idx}`}>
+                            <td style={{ padding: '0.6rem 1rem', fontWeight: 600 }}>
+                              {pay.fcnName}
+                            </td>
+                            <td style={{ padding: '0.6rem 1rem' }}>
+                              {pay.dateStr || '估計日'}
+                            </td>
+                            <td style={{ padding: '0.6rem 1rem' }}>
+                              <span className="stock-ticker-badge">{pay.currency}</span>
+                            </td>
+                            <td style={{ padding: '0.6rem 1rem', textAlign: 'right', color: 'var(--color-success)', fontWeight: 600 }}>
+                              {formatCurrency(pay.amount, pay.currency)}
+                            </td>
+                            <td style={{ padding: '0.6rem 1rem', textAlign: 'right', color: '#c084fc', fontWeight: 600 }}>
+                              {formatCurrency(convertedTwd, 'TWD')}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
