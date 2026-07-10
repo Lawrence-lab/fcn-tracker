@@ -1,6 +1,19 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function Dashboard({ fcns }) {
+  const [usdToTwd, setUsdToTwd] = useState(32.2);
+
+  useEffect(() => {
+    fetch('/api/exchange-rate')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.USDTWD) {
+          setUsdToTwd(data.USDTWD);
+        }
+      })
+      .catch(err => console.error('Failed to fetch exchange rate:', err));
+  }, []);
+
   const activeFcns = fcns.filter(item => item.status === 'Active');
   
   // Calculate capital totals by currency
@@ -11,10 +24,11 @@ export default function Dashboard({ fcns }) {
     return acc;
   }, {});
 
+  const totalUSD = totals['USD'] || 0;
+  const totalTWD = totals['TWD'] || 0;
+  const combinedTwdPrincipal = totalTWD + (totalUSD * usdToTwd);
+
   // Calculate weighted average coupon rate
-  const totalPrincipalUSD = activeFcns.filter(f => f.currency === 'USD').reduce((sum, f) => sum + (Number(f.principal) || 0), 0);
-  const totalPrincipalTWD = activeFcns.filter(f => f.currency === 'TWD').reduce((sum, f) => sum + (Number(f.principal) || 0), 0);
-  
   let averageCoupon = 0;
   if (activeFcns.length > 0) {
     const sumCoupons = activeFcns.reduce((sum, f) => sum + (Number(f.annualCouponRate) || 0), 0);
@@ -24,14 +38,13 @@ export default function Dashboard({ fcns }) {
   // Count special states
   const kiCount = activeFcns.filter(f => f.isKnockedIn).length;
   
-  // Identify high risk items (stocks with distance to KI <= 5% and not yet knocked in, or already knocked in)
+  // Identify high risk items
   const dangerStocks = [];
   activeFcns.forEach(fcn => {
     if (!fcn.stocks) return;
     fcn.stocks.forEach(stock => {
       if (stock.currentPercent !== null) {
         const distToKi = stock.currentPercent - stock.kiPercent;
-        // In danger if already KI-ed or if within 5% of KI barrier
         if (fcn.isKnockedIn && stock.currentPercent <= stock.kiPercent) {
           dangerStocks.push({
             fcnId: fcn.id,
@@ -110,14 +123,17 @@ export default function Dashboard({ fcns }) {
         <div className="glass-card stat-card">
           <span className="stat-label">美元未平倉本金</span>
           <span className="stat-value">
-            {formatCurrency(totals['USD'] || 0, 'USD')}
+            {formatCurrency(totalUSD, 'USD')}
           </span>
         </div>
 
-        <div className="glass-card stat-card">
-          <span className="stat-label">台幣未平倉本金</span>
-          <span className="stat-value">
-            {formatCurrency(totals['TWD'] || 0, 'TWD')}
+        <div className="glass-card stat-card" style={{ borderLeft: '4px solid #8b5cf6' }}>
+          <span className="stat-label" style={{ color: '#c084fc' }}>總未平倉本金 (折合台幣)</span>
+          <span className="stat-value" style={{ color: '#c084fc' }}>
+            {formatCurrency(combinedTwdPrincipal, 'TWD')}
+          </span>
+          <span className="stat-value-sub" style={{ display: 'block', marginTop: '0.2rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+            參考匯率：1 USD = {usdToTwd.toFixed(2)} TWD
           </span>
         </div>
 
@@ -143,7 +159,7 @@ export default function Dashboard({ fcns }) {
         </div>
       </div>
 
-      {/* Helpful educational info in nice clean presentation */}
+      {/* Helpful educational info */}
       <div className="glass-card" style={{ marginTop: '2rem', borderLeft: '4px solid var(--color-primary)' }}>
         <h3 style={{ marginBottom: '0.75rem', fontWeight: 600 }}>💡 FCN 小知識小工具</h3>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.6' }}>
