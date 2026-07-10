@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 export default function InterestCalendar({ fcns }) {
-  const activeFcns = fcns.filter(item => item.status === 'Active' && item.currency === 'USD');
+  const [filterCurrency, setFilterCurrency] = useState('ALL');
+
+  const activeFcns = fcns.filter(item => item.status === 'Active');
 
   // Helper to generate projected payment schedule for a single FCN
   const getProjectedInterest = (fcn) => {
@@ -92,7 +94,7 @@ export default function InterestCalendar({ fcns }) {
     return schedule;
   };
 
-  // Compile all schedules (only for USD active FCNs)
+  // Compile all schedules
   let allPayments = [];
   activeFcns.forEach(fcn => {
     allPayments = [...allPayments, ...getProjectedInterest(fcn)];
@@ -105,24 +107,38 @@ export default function InterestCalendar({ fcns }) {
       acc[month] = {
         month,
         payments: [],
-        totalUSD: 0
+        totals: { USD: 0, TWD: 0 }
       };
     }
     acc[month].payments.push(pay);
-    acc[month].totalUSD += pay.amount;
+    acc[month].totals[pay.currency] += pay.amount;
     return acc;
   }, {});
 
   // Sort months chronologically
   const sortedMonths = Object.values(monthlyGroups).sort((a, b) => a.month.localeCompare(b.month));
 
-  // Calculate total projected USD earnings
-  const grandTotalUSD = allPayments.reduce((acc, pay) => acc + pay.amount, 0);
+  // Filter months if specific currency selected
+  const filteredMonths = sortedMonths.map(group => {
+    const payments = group.payments.filter(p => filterCurrency === 'ALL' || p.currency === filterCurrency);
+    const totals = { ...group.totals };
+    return {
+      ...group,
+      payments,
+      totals
+    };
+  }).filter(group => group.payments.length > 0);
 
-  const formatCurrency = (val) => {
-    return new Intl.NumberFormat('en-US', {
+  // Calculate total projected earnings
+  const grandTotals = allPayments.reduce((acc, pay) => {
+    acc[pay.currency] = (acc[pay.currency] || 0) + pay.amount;
+    return acc;
+  }, { USD: 0, TWD: 0 });
+
+  const formatCurrency = (val, cur) => {
+    return new Intl.NumberFormat(cur === 'TWD' ? 'zh-TW' : 'en-US', {
       style: 'currency',
-      currency: 'USD',
+      currency: cur,
       minimumFractionDigits: 2
     }).format(val);
   };
@@ -135,37 +151,77 @@ export default function InterestCalendar({ fcns }) {
   return (
     <div className="interest-calendar-container">
       <div className="fcn-section-header">
-        <h2 className="fcn-section-title">預期美元配息收入行事曆</h2>
+        <h2 className="fcn-section-title">預期配息利息收入行事曆</h2>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button 
+            className={`action-btn ${filterCurrency === 'ALL' ? 'edit' : 'btn-secondary'}`}
+            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+            onClick={() => setFilterCurrency('ALL')}
+          >
+            全部幣別
+          </button>
+          <button 
+            className={`action-btn ${filterCurrency === 'USD' ? 'edit' : 'btn-secondary'}`}
+            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+            onClick={() => setFilterCurrency('USD')}
+          >
+            僅看 USD
+          </button>
+          <button 
+            className={`action-btn ${filterCurrency === 'TWD' ? 'edit' : 'btn-secondary'}`}
+            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+            onClick={() => setFilterCurrency('TWD')}
+          >
+            僅看 TWD
+          </button>
+        </div>
       </div>
 
-      {/* Summary Card (USD only, styled full width or nice card layout) */}
-      <div style={{ marginBottom: '2rem' }}>
-        <div className="glass-card stat-card success" style={{ maxWidth: '400px' }}>
-          <span className="stat-label">預估累計美元利息總額 (USD)</span>
-          <span className="stat-value" style={{ fontSize: '1.8rem', color: 'var(--color-success)' }}>
-            {formatCurrency(grandTotalUSD)}
+      {/* Summary Cards */}
+      <div className="dashboard-grid" style={{ marginBottom: '2rem' }}>
+        <div className="glass-card stat-card success">
+          <span className="stat-label">預估累計美元利息 (USD)</span>
+          <span className="stat-value" style={{ fontSize: '1.6rem', color: 'var(--color-success)' }}>
+            {formatCurrency(grandTotals.USD, 'USD')}
+          </span>
+          <span className="stat-value-sub">基於目前所有 Active 商品持有至到期之假設</span>
+        </div>
+
+        <div className="glass-card stat-card success">
+          <span className="stat-label">預估累計台幣利息 (TWD)</span>
+          <span className="stat-value" style={{ fontSize: '1.6rem', color: 'var(--color-success)' }}>
+            {formatCurrency(grandTotals.TWD, 'TWD')}
           </span>
           <span className="stat-value-sub">基於目前所有 Active 商品持有至到期之假設</span>
         </div>
       </div>
 
-      {sortedMonths.length === 0 ? (
+      {filteredMonths.length === 0 ? (
         <div className="glass-card empty-state">
           <div className="empty-state-icon">📅</div>
           <h3>目前無預估配息日程</h3>
-          <p>請確認是否有登錄未平倉的美元 FCN 商品。</p>
+          <p>請確認是否有登錄未平倉商品，或調整幣別篩選器。</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {sortedMonths.map((group) => {
+          {filteredMonths.map((group) => {
             return (
               <div key={group.month} className="glass-card" style={{ padding: '1.25rem', borderLeft: '4px solid var(--color-primary)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                   <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>
                     📅 {formatMonthTitle(group.month)}
                   </h3>
-                  <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--color-success)' }}>
-                    月配息小計: {formatCurrency(group.totalUSD)}
+                  <div style={{ display: 'flex', gap: '1rem', fontSize: '0.9rem', fontWeight: 600 }}>
+                    {(filterCurrency === 'ALL' || filterCurrency === 'USD') && group.totals.USD > 0 && (
+                      <span style={{ color: 'var(--color-success)' }}>
+                        月配息小計 (USD): {formatCurrency(group.totals.USD, 'USD')}
+                      </span>
+                    )}
+                    {(filterCurrency === 'ALL' || filterCurrency === 'TWD') && group.totals.TWD > 0 && (
+                      <span style={{ color: 'var(--color-success)' }}>
+                        月配息小計 (TWD): {formatCurrency(group.totals.TWD, 'TWD')}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -176,6 +232,7 @@ export default function InterestCalendar({ fcns }) {
                       <tr style={{ background: 'rgba(255,255,255,0.01)' }}>
                         <th style={{ padding: '0.6rem 1rem' }}>來源 FCN 商品</th>
                         <th style={{ padding: '0.6rem 1rem' }}>約定配息日期</th>
+                        <th style={{ padding: '0.6rem 1rem' }}>幣別</th>
                         <th style={{ padding: '0.6rem 1rem', textAlign: 'right' }}>本期預估利息</th>
                       </tr>
                     </thead>
@@ -188,8 +245,11 @@ export default function InterestCalendar({ fcns }) {
                           <td style={{ padding: '0.6rem 1rem' }}>
                             {pay.dateStr || '估計日'}
                           </td>
+                          <td style={{ padding: '0.6rem 1rem' }}>
+                            <span className="stock-ticker-badge">{pay.currency}</span>
+                          </td>
                           <td style={{ padding: '0.6rem 1rem', textAlign: 'right', color: 'var(--color-success)', fontWeight: 600 }}>
-                            {formatCurrency(pay.amount)}
+                            {formatCurrency(pay.amount, pay.currency)}
                           </td>
                         </tr>
                       ))}
