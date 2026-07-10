@@ -21,6 +21,17 @@ export default function App() {
   const [marketPriceSettle, setMarketPriceSettle] = useState('');
   const [settleNote, setSettleNote] = useState('');
 
+  // Helper to prompt for admin password for modifying operations
+  const verifyAdminPassword = () => {
+    const pwd = prompt('🔒 請輸入管理密碼以執行此操作：');
+    if (pwd === null) return null; // User clicked cancel
+    if (pwd !== '970929') {
+      alert('❌ 密碼錯誤，拒絕執行！');
+      return null;
+    }
+    return pwd;
+  };
+
   // Fetch FCNs
   const fetchFCNS = async () => {
     try {
@@ -52,13 +63,19 @@ export default function App() {
 
   // Create or Edit FCN submission
   const handleFormSubmit = async (payload) => {
+    const pwd = verifyAdminPassword();
+    if (!pwd) return;
+
     try {
       const url = editingFcn ? `/api/fcns/${editingFcn.id}` : '/api/fcns';
       const method = editingFcn ? 'PUT' : 'POST';
 
       const response = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Admin-Password': pwd
+        },
         body: JSON.stringify(payload)
       });
 
@@ -78,12 +95,21 @@ export default function App() {
 
   // Delete FCN
   const handleDeleteFcn = async (id) => {
+    const pwd = verifyAdminPassword();
+    if (!pwd) return;
+
     try {
-      const response = await fetch(`/api/fcns/${id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/fcns/${id}`, { 
+        method: 'DELETE',
+        headers: {
+          'X-Admin-Password': pwd
+        }
+      });
       if (response.ok) {
         fetchFCNS();
       } else {
-        alert('刪除失敗');
+        const err = await response.json();
+        alert(`刪除失敗: ${err.error || '不明錯誤'}`);
       }
     } catch (error) {
       console.error('Error deleting FCN:', error);
@@ -131,6 +157,9 @@ export default function App() {
     e.preventDefault();
     if (!settlingFcn) return;
 
+    const pwd = verifyAdminPassword();
+    if (!pwd) return;
+
     const principal = Number(settlingFcn.principal) || 0;
     const couponsEarned = Number(totalCoupons) || 0;
 
@@ -173,7 +202,10 @@ export default function App() {
     try {
       const response = await fetch(`/api/fcns/${settlingFcn.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Admin-Password': pwd
+        },
         body: JSON.stringify({
           status: settleType,
           settlement: settlementData
@@ -185,7 +217,8 @@ export default function App() {
         setActiveTab('history');
         fetchFCNS();
       } else {
-        alert('辦理結算失敗');
+        const err = await response.json();
+        alert(`辦理結算失敗: ${err.error || '不明錯誤'}`);
       }
     } catch (error) {
       console.error('Error settling FCN:', error);

@@ -15,6 +15,22 @@ const DATA_FILE = process.env.DATA_PATH ? path.join(process.env.DATA_PATH, 'fcns
 app.use(cors());
 app.use(express.json());
 
+// Password protection middleware for write actions (POST, PUT, DELETE)
+app.use((req, res, next) => {
+  const writeMethods = ['POST', 'PUT', 'DELETE'];
+  if (writeMethods.includes(req.method)) {
+    // Skip password check for price sync operations
+    if (req.path === '/api/fcns/refresh' || req.path === '/api/fcns/evaluate') {
+      return next();
+    }
+    const clientPassword = req.headers['x-admin-password'];
+    if (clientPassword !== '970929') {
+      return res.status(403).json({ error: '密碼錯誤，操作被拒絕！' });
+    }
+  }
+  next();
+});
+
 // In-memory stock price cache to avoid Yahoo Finance rate limits
 const priceCache = new Map();
 const CACHE_DURATION_MS = 3 * 60 * 1000; // 3 minutes cache
