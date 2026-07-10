@@ -1,0 +1,348 @@
+import express from 'express';
+import cors from 'cors';
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import cron from 'node-cron';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+const DATA_FILE = process.env.DATA_PATH ? path.join(process.env.DATA_PATH, 'fcns.json') : path.join(__dirname, 'data', 'fcns.json');
+
+app.use(cors());
+app.use(express.json());
+
+// In-memory stock price cache to avoid Yahoo Finance rate limits
+const priceCache = new Map();
+const CACHE_DURATION_MS = 3 * 60 * 1000; // 3 minutes cache
+
+// Helper to fetch price from Yahoo Finance
+async function getStockPrice(symbol) {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  const cached = priceCache.get(normalizedSymbol);
+  const now = Date.now();
+
+  if (cached && (now - cached.timestamp < CACHE_DURATION_MS)) {
+    return cached.data;
+  }
+
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(normalizedSymbol)}?interval=1d&range=1d`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error ${response.status}`);
+    }
+
+    const data = await response.json();
+    const result = data?.chart?.result?.[0];
+    
+    if (!result) {
+      throw new Error('Stock not found or invalid format');
+    }
+
+    const price = result.meta.regularMarketPrice;
+    const prevClose = result.meta.chartPreviousClose;
+    const name = result.meta.longName || result.meta.shortName || normalizedSymbol;
+    const currency = result.meta.currency || 'USD';
+
+    const stockInfo = {
+      price,
+      prevClose,
+      name,
+      currency,
+      updatedAt: new Date().toISOString()
+    };
+
+    priceCache.set(normalizedSymbol, {
+      timestamp: now,
+      data: stockInfo
+    });
+
+    return stockInfo;
+  } catch (error) {
+    console.error(`Error fetching Yahoo Finance data for ${symbol}:`, error.message);
+    if (cached) {
+      return cached.data; // Fallback to stale cache if API error
+    }
+    throw error;
+  }
+}
+
+// Helpers for file DB
+async function readFCNDb() {
+  try {
+    const raw = await fs.readFile(DATA_FILE, 'utf-8');
+    return JSON.parse(raw);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      // Create directories and write empty array if file missing
+      await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
+      await fs.writeFile(DATA_FILE, '[]', 'utf-8');
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function writeFCNDb(data) {
+  await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
+  await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+// REST APIs
+// 1. Get all FCNs with dynamic stock prices
+app.get('/api/fcns', async (req, res) => {
+  try {
+    const fcns = await readFCNDb();
+    
+    // Collect all unique active stock symbols
+    const symbols = new Set();
+    fcns.forEach(fcn => {
+      if (fcn.status === 'Active' && fcn.stocks) {
+        fcn.stocks.forEach(s => {
+          if (s.symbol) symbols.add(s.symbol.trim().toUpperCase());
+        });
+      }
+    });
+
+    // Fetch prices in parallel
+    const priceMap = {};
+    await Promise.all(
+      Array.from(symbols).map(async (symbol) => {
+        try {
+          const info = await getStockPrice(symbol);
+          priceMap[symbol] = info;
+        } catch (error) {
+          priceMap[symbol] = { price: null, prevClose: null, error: error.message };
+        }
+      })
+    );
+
+    // Enrich FCN data with current calculations
+    const enriched = fcns.map(fcn => {
+      if (!fcn.stocks) return fcn;
+
+      const enrichedStocks = fcn.stocks.map(stock => {
+        const symbolUpper = stock.symbol.trim().toUpperCase();
+        const market = priceMap[symbolUpper] || {};
+        
+        const currentPrice = market.price;
+        const prevClose = market.prevClose;
+        const resolvedName = stock.name || market.name || stock.symbol;
+
+        let currentPercent = null;
+        let distanceToKo = null;
+        let distanceToKi = null;
+        let distanceToStrike = null;
+
+        if (currentPrice !== null && stock.initialPrice) {
+          currentPercent = (currentPrice / stock.initialPrice) * 100;
+          
+          const koVal = stock.initialPrice * (stock.koPercent / 100);
+          const kiVal = stock.initialPrice * (stock.kiPercent / 100);
+          const strikeVal = stock.initialPrice * (stock.strikePercent / 100);
+
+          distanceToKo = ((currentPrice - koVal) / koVal) * 100;
+          distanceToKi = ((currentPrice - kiVal) / kiVal) * 100;
+          distanceToStrike = ((currentPrice - strikeVal) / strikeVal) * 100;
+        }
+
+        return {
+          ...stock,
+          name: resolvedName,
+          currentPrice,
+          prevClose,
+          currentPercent,
+          distanceToKo,
+          distanceToKi,
+          distanceToStrike
+        };
+      });
+
+      // Determine worst-performing stock (determines FCN status)
+      let worstStock = null;
+      if (enrichedStocks.length > 0) {
+        // filter out stocks with missing calculations
+        const validStocks = enrichedStocks.filter(s => s.currentPercent !== null);
+        if (validStocks.length > 0) {
+          worstStock = validStocks.reduce((prev, curr) => 
+            (curr.currentPercent < prev.currentPercent) ? curr : prev
+          );
+        }
+      }
+
+      // Check for automatic KI trigger
+      let autoKiTriggered = fcn.isKnockedIn;
+      if (!autoKiTriggered && worstStock && worstStock.currentPercent <= worstStock.kiPercent) {
+        autoKiTriggered = true; // Auto-trip the flag
+      }
+
+      return {
+        ...fcn,
+        stocks: enrichedStocks,
+        isKnockedIn: autoKiTriggered,
+        worstStockSymbol: worstStock ? worstStock.symbol : null,
+        worstStockPercent: worstStock ? worstStock.currentPercent : null
+      };
+    });
+
+    res.json(enriched);
+  } catch (error) {
+    console.error('API Error /api/fcns:', error);
+    res.status(500).json({ error: 'Failed to retrieve FCN records' });
+  }
+});
+
+// 2. Add FCN
+app.post('/api/fcns', async (req, res) => {
+  try {
+    const newFcn = req.body;
+    if (!newFcn.name || !newFcn.stocks || newFcn.stocks.length === 0) {
+      return res.status(400).json({ error: 'Missing required FCN fields' });
+    }
+
+    const db = await readFCNDb();
+    newFcn.id = `fcn-${Date.now()}`;
+    newFcn.isKnockedIn = newFcn.isKnockedIn || false;
+    newFcn.status = newFcn.status || 'Active';
+    newFcn.createdAt = new Date().toISOString();
+
+    db.push(newFcn);
+    await writeFCNDb(db);
+    res.status(201).json(newFcn);
+  } catch (error) {
+    console.error('API Error add FCN:', error);
+    res.status(500).json({ error: 'Failed to add FCN record' });
+  }
+});
+
+// 3. Update FCN
+app.put('/api/fcns/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updatedFcn = req.body;
+    const db = await readFCNDb();
+    
+    const index = db.findIndex(item => item.id === id);
+    if (index === -1) {
+      return res.status(404).json({ error: 'FCN record not found' });
+    }
+
+    db[index] = { ...db[index], ...updatedFcn, id }; // Prevent ID modification
+    await writeFCNDb(db);
+    res.json(db[index]);
+  } catch (error) {
+    console.error('API Error update FCN:', error);
+    res.status(500).json({ error: 'Failed to update FCN record' });
+  }
+});
+
+// 4. Delete FCN
+app.delete('/api/fcns/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = await readFCNDb();
+    
+    const filtered = db.filter(item => item.id !== id);
+    if (filtered.length === db.length) {
+      return res.status(404).json({ error: 'FCN record not found' });
+    }
+
+    await writeFCNDb(filtered);
+    res.json({ message: 'FCN record deleted successfully' });
+  } catch (error) {
+    console.error('API Error delete FCN:', error);
+    res.status(500).json({ error: 'Failed to delete FCN record' });
+  }
+});
+
+// 5. Force Refresh Cache
+app.post('/api/fcns/refresh', (req, res) => {
+  priceCache.clear();
+  res.json({ message: 'Stock price cache cleared successfully' });
+});
+
+// Helper to evaluate KI and KO triggers for active FCNs
+async function evaluateFCNTriggers() {
+  console.log('Running FCN price and trigger evaluation...');
+  priceCache.clear(); // Clear cache to get fresh prices
+  
+  const fcns = await readFCNDb();
+  let modifiedCount = 0;
+  
+  for (let fcn of fcns) {
+    if (fcn.status !== 'Active') continue;
+    
+    let modified = false;
+    
+    for (let stock of fcn.stocks) {
+      try {
+        const market = await getStockPrice(stock.symbol);
+        if (market.price !== null) {
+          const currentPercent = (market.price / stock.initialPrice) * 100;
+          
+          // Check if this stock touched KI (Knock-In)
+          const kiPercent = stock.kiPercent;
+          if (kiPercent > 0 && currentPercent <= kiPercent && !fcn.isKnockedIn) {
+            fcn.isKnockedIn = true;
+            modified = true;
+            console.log(`[Auto-Trigger] FCN "${fcn.name}" has knocked-in because stock ${stock.symbol} touched ${currentPercent.toFixed(2)}% (KI barrier is ${kiPercent}%)`);
+          }
+        }
+      } catch (err) {
+        console.error(`Error checking triggers for stock ${stock.symbol} in FCN "${fcn.name}":`, err.message);
+      }
+    }
+    
+    if (modified) {
+      modifiedCount++;
+    }
+  }
+  
+  if (modifiedCount > 0) {
+    await writeFCNDb(fcns);
+    console.log(`Evaluation complete. Saved updates for ${modifiedCount} FCN records.`);
+  } else {
+    console.log('Evaluation complete. No database changes required.');
+  }
+  
+  return modifiedCount;
+}
+
+// 6. Force Evaluation of Triggers
+app.post('/api/fcns/evaluate', async (req, res) => {
+  try {
+    const updatedCount = await evaluateFCNTriggers();
+    res.json({ message: `Evaluation complete. Updated ${updatedCount} FCN records.` });
+  } catch (error) {
+    console.error('API Error evaluate FCNs:', error);
+    res.status(500).json({ error: 'Failed to run trigger evaluation' });
+  }
+});
+
+// Schedule daily FCN trigger checks at 5:30 AM (Asia/Taipei time)
+cron.schedule('30 5 * * *', async () => {
+  try {
+    await evaluateFCNTriggers();
+  } catch (error) {
+    console.error('Error in scheduled daily FCN evaluation:', error);
+  }
+});
+
+// Serve frontend in production
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/dist', 'index.html'));
+});
+
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});

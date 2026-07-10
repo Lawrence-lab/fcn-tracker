@@ -1,0 +1,21 @@
+{
+  "name": "fcn-tracker",
+  "version": "1.0.0",
+  "description": "FCN Portfolio Tracker",
+  "main": "backend/server.js",
+  "type": "module",
+  "scripts": {
+    "server": "node backend/server.js",
+    "client": "npm run --prefix frontend dev",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "build": "npm run --prefix frontend build",
+    "start": "node backend/server.js",
+    "postinstall": "npm install --prefix frontend"
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "node-cron": "^4.6.0"
+  }
+}

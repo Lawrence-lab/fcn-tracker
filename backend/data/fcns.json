@@ -1,0 +1,60 @@
+[
+  {
+    "id": "fcn-2026sn3984",
+    "name": "FCN 2026SN3984 (TSM/AMD/MU/NVDA)",
+    "bank": "星展銀行 DBS",
+    "currency": "USD",
+    "principal": 50000,
+    "annualCouponRate": 24.0,
+    "couponFrequency": "Monthly",
+    "tradeDate": "2026-07-07",
+    "startDate": "2026-07-16",
+    "maturityDate": "2027-01-14",
+    "observationFrequency": "Monthly",
+    "status": "Active",
+    "isKnockedIn": false,
+    "couponPaymentDates": [
+      "2026-08-19",
+      "2026-09-17",
+      "2026-10-19",
+      "2026-11-19",
+      "2026-12-17",
+      "2027-01-20"
+    ],
+    "stocks": [
+      {
+        "symbol": "TSM",
+        "name": "台積電 ADR",
+        "initialPrice": 432.57,
+        "koPercent": 100.0,
+        "kiPercent": 0.0,
+        "strikePercent": 58.05
+      },
+      {
+        "symbol": "AMD",
+        "name": "超微半導體",
+        "initialPrice": 516.11,
+        "koPercent": 100.0,
+        "kiPercent": 0.0,
+        "strikePercent": 58.05
+      },
+      {
+        "symbol": "MU",
+        "name": "美光科技",
+        "initialPrice": 938.38,
+        "koPercent": 100.0,
+        "kiPercent": 0.0,
+        "strikePercent": 58.05
+      },
+      {
+        "symbol": "NVDA",
+        "name": "輝達",
+        "initialPrice": 196.93,
+        "koPercent": 100.0,
+        "kiPercent": 0.0,
+        "strikePercent": 58.05
+      }
+    ],
+    "note": "天期 6M，年化利率 24.00%。此合約為 EKI (歐洲式敲入) 且觸及生效價為 0.00% (無期中敲入風險)，僅於到期日 (2027-01-14) 判斷是否低於 58.05% 的履約價進行接股。"
+  }
+]
