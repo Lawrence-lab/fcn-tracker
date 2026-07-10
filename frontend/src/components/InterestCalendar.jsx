@@ -167,30 +167,9 @@ export default function InterestCalendar({ fcns }) {
       <div className="fcn-section-header">
         <h2 className="fcn-section-title">預期配息利息收入行事曆</h2>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginRight: '0.5rem' }}>
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
             參考匯率：1 USD = {usdToTwd.toFixed(2)} TWD
           </span>
-          <button 
-            className={`action-btn ${filterCurrency === 'ALL' ? 'edit' : 'btn-secondary'}`}
-            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
-            onClick={() => setFilterCurrency('ALL')}
-          >
-            全部幣別
-          </button>
-          <button 
-            className={`action-btn ${filterCurrency === 'USD' ? 'edit' : 'btn-secondary'}`}
-            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
-            onClick={() => setFilterCurrency('USD')}
-          >
-            僅看 USD
-          </button>
-          <button 
-            className={`action-btn ${filterCurrency === 'TWD' ? 'edit' : 'btn-secondary'}`}
-            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
-            onClick={() => setFilterCurrency('TWD')}
-          >
-            僅看 TWD
-          </button>
         </div>
       </div>
 
@@ -202,14 +181,6 @@ export default function InterestCalendar({ fcns }) {
             {formatCurrency(grandTotals.USD, 'USD')}
           </span>
           <span className="stat-value-sub">各合約原始美金收益加總</span>
-        </div>
-
-        <div className="glass-card stat-card success">
-          <span className="stat-label">預估累計台幣利息 (TWD)</span>
-          <span className="stat-value" style={{ fontSize: '1.6rem', color: 'var(--color-success)' }}>
-            {formatCurrency(grandTotals.TWD, 'TWD')}
-          </span>
-          <span className="stat-value-sub">各合約原始台幣收益加總</span>
         </div>
 
         <div className="glass-card stat-card success" style={{ borderLeft: '4px solid #8b5cf6' }}>
