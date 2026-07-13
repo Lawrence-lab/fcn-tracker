@@ -128,6 +128,7 @@
     "maturityDate": "2027-04-23",
     "observationFrequency": "Monthly",
     "isKnockedIn": false,
+    "lockInMonths": 4,
     "note": "12M FCN with 4-month lock-in period (closed period). Monthly coupon is USD 832.92. KO observations start on 2025-08-24.",
     "couponPaymentDates": [
       "2026-05-29",

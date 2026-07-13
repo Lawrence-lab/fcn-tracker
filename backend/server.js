@@ -1,12 +1,31 @@
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import cron from 'node-cron';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Load local .env file if it exists (for local testing)
+try {
+  if (fsSync.existsSync(path.join(__dirname, '../.env'))) {
+    const envFile = fsSync.readFileSync(path.join(__dirname, '../.env'), 'utf-8');
+    envFile.split('\n').forEach(line => {
+      const parts = line.split('=');
+      if (parts.length >= 2) {
+        const key = parts[0].trim();
+        const value = parts.slice(1).join('=').trim();
+        process.env[key] = value;
+      }
+    });
+    console.log('Loaded local .env environment variables successfully!');
+  }
+} catch (e) {
+  console.log('No local .env file read:', e.message);
+}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -19,8 +38,8 @@ app.use(express.json());
 app.use((req, res, next) => {
   const writeMethods = ['POST', 'PUT', 'DELETE'];
   if (writeMethods.includes(req.method)) {
-    // Skip password check for price sync operations
-    if (req.path === '/api/fcns/refresh' || req.path === '/api/fcns/evaluate') {
+    // Skip password check for price sync and LINE test operations
+    if (req.path === '/api/fcns/refresh' || req.path === '/api/fcns/evaluate' || req.path === '/api/fcns/test-line') {
       return next();
     }
     const clientPassword = req.headers['x-admin-password'];
@@ -306,8 +325,18 @@ app.get('/api/fcns', async (req, res) => {
         autoKiTriggered = true; // Auto-trip the flag
       }
 
-      // Check for automatic KO trigger (all active stocks are >= koPercent)
-      const isKoTriggered = enrichedStocks.length > 0 && enrichedStocks.every(s => s.currentPercent !== null && s.currentPercent >= s.koPercent);
+      // Check for automatic KO trigger (all active stocks are >= koPercent, and past lock-in period)
+      let isKoTriggered = false;
+      if (fcn.status === 'Active' && fcn.startDate && enrichedStocks.length > 0) {
+        const lockInMonths = fcn.lockInMonths !== undefined ? Number(fcn.lockInMonths) : 1;
+        const startDate = new Date(fcn.startDate);
+        const koStartDate = new Date(startDate.setMonth(startDate.getMonth() + lockInMonths));
+        const today = new Date();
+        
+        if (today >= koStartDate) {
+          isKoTriggered = enrichedStocks.every(s => s.currentPercent !== null && s.currentPercent >= s.koPercent);
+        }
+      }
 
       return {
         ...fcn,
@@ -446,7 +475,22 @@ async function evaluateFCNTriggers() {
     if (fcn.status !== 'Active') continue;
     
     let modified = false;
-    let allStocksAboveKo = true;
+    
+    // Check if the FCN has passed the lock-in period
+    let hasObservationStarted = true;
+    if (fcn.startDate) {
+      const lockInMonths = fcn.lockInMonths !== undefined ? Number(fcn.lockInMonths) : 1;
+      const startDate = new Date(fcn.startDate);
+      const koStartDate = new Date(startDate.setMonth(startDate.getMonth() + lockInMonths));
+      const today = new Date();
+      if (today < koStartDate) {
+        hasObservationStarted = false;
+      }
+    } else {
+      hasObservationStarted = false;
+    }
+
+    let allStocksAboveKo = hasObservationStarted;
     
     for (let stock of fcn.stocks) {
       try {
@@ -504,6 +548,24 @@ app.post('/api/fcns/evaluate', async (req, res) => {
   } catch (error) {
     console.error('API Error evaluate FCNs:', error);
     res.status(500).json({ error: 'Failed to run trigger evaluation' });
+  }
+});
+
+// 7. Test LINE Notify / Bot Connection
+app.post('/api/fcns/test-line', async (req, res) => {
+  try {
+    const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+    const userId = process.env.LINE_USER_ID;
+    
+    if (!token || !userId) {
+      return res.status(400).json({ error: '本機尚未設定 LINE_CHANNEL_ACCESS_TOKEN 或 LINE_USER_ID 環境變數' });
+    }
+    
+    await sendLineNotification('測試訊息：您的 FCN 系統本機測試連線成功！📬');
+    res.json({ message: '測試通知發送成功，請檢查您的手機 LINE 帳號！' });
+  } catch (error) {
+    console.error('Test LINE error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

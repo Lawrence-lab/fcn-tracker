@@ -61,6 +61,22 @@ export default function App() {
     }
   };
 
+  // Send test LINE message
+  const handleTestLine = async () => {
+    try {
+      const response = await fetch('/api/fcns/test-line', { method: 'POST' });
+      if (response.ok) {
+        alert('✅ 測試訊息已送出！請檢查您的手機 LINE 是否有收到「測試成功」訊息。');
+      } else {
+        const err = await response.json();
+        alert(`❌ 測試失敗: ${err.error || '未設定環境變數'}`);
+      }
+    } catch (error) {
+      console.error('Error testing LINE connection:', error);
+      alert('❌ 連線失敗，請檢查本機後端伺服器是否正常啟動。');
+    }
+  };
+
   // Create or Edit FCN submission
   const handleFormSubmit = async (payload) => {
     const pwd = verifyAdminPassword();

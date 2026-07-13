@@ -21,6 +21,7 @@ export default function FCNForm({ editingFcn, onSubmit, onCancel }) {
   const [maturityDate, setMaturityDate] = useState('');
   const [observationFrequency, setObservationFrequency] = useState('Monthly');
   const [isKnockedIn, setIsKnockedIn] = useState(false);
+  const [lockInMonths, setLockInMonths] = useState(1);
   const [note, setNote] = useState('');
   const [stocks, setStocks] = useState([emptyStock()]);
 
@@ -73,19 +74,20 @@ Output JSON structure:
   "observationFrequency": "Monthly" or "Quarterly",
   "tradeDate": "YYYY-MM-DD" (E.g. if July 7th is Trade Date and current year is 2026, parse as 2026-07-07),
   "startDate": "YYYY-MM-DD" (E.g. July 16th -> 2026-07-16),
-  "maturityDate": "YYYY-MM-DD" (E.g. 最終評價日 1月14日 -> 2027-01-14),
-  "couponPaymentDates": ["YYYY-MM-DD", "YYYY-MM-DD", ...], (Extract the exact list of payment dates / 配息日 if shown in the image. E.g. August 19th -> 2026-08-19, September 17th -> 2026-09-17...),
-  "stocks": [
+  maturityDate: "YYYY-MM-DD" (E.g. 最終評價日 1月14日 -> 2027-01-14),
+  lockInMonths: number (E.g. closed period / lock-in period in months. If 4-month closed period, parse as 4. If not specified or standard 1-month, parse as 1),
+  couponPaymentDates: ["YYYY-MM-DD", "YYYY-MM-DD", ...], (Extract the exact list of payment dates / 配息日 if shown in the image. E.g. August 19th -> 2026-08-19, September 17th -> 2026-09-17...),
+  stocks: [
     {
-      "symbol": "TSM",
-      "name": "台積電 ADR",
-      "initialPrice": 432.57,
-      "koPercent": 100.0,
-      "kiPercent": 0.0,
-      "strikePercent": 58.05
+      symbol: "TSM",
+      name: "台積電 ADR",
+      initialPrice: 432.57,
+      koPercent: 100.0,
+      kiPercent: 0.0,
+      strikePercent: 58.05
     }
   ],
-  "note": "brief notes about the contract"
+  note: "brief notes about the contract"
 }
 
 Important Rules for stock calculations:
@@ -152,6 +154,7 @@ Important Rules for stock calculations:
       setStartDate(parsed.startDate || '');
       setMaturityDate(parsed.maturityDate || '');
       setObservationFrequency(parsed.observationFrequency || 'Monthly');
+      setLockInMonths(parsed.lockInMonths !== undefined ? parsed.lockInMonths : 1);
       setNote(parsed.note || '');
       setCouponPaymentDatesRaw(parsed.couponPaymentDates ? parsed.couponPaymentDates.join(', ') : '');
       
@@ -209,6 +212,7 @@ Important Rules for stock calculations:
       setMaturityDate(editingFcn.maturityDate || '');
       setObservationFrequency(editingFcn.observationFrequency || 'Monthly');
       setIsKnockedIn(editingFcn.isKnockedIn || false);
+      setLockInMonths(editingFcn.lockInMonths !== undefined ? editingFcn.lockInMonths : 1);
       setNote(editingFcn.note || '');
       setCouponPaymentDatesRaw(editingFcn.couponPaymentDates ? editingFcn.couponPaymentDates.join(', ') : '');
       if (editingFcn.stocks && editingFcn.stocks.length > 0) {
@@ -235,6 +239,7 @@ Important Rules for stock calculations:
       setMaturityDate('');
       setObservationFrequency('Monthly');
       setIsKnockedIn(false);
+      setLockInMonths(1);
       setNote('');
       setCouponPaymentDatesRaw('');
       setStocks([emptyStock()]);
@@ -287,6 +292,7 @@ Important Rules for stock calculations:
       maturityDate,
       observationFrequency,
       isKnockedIn,
+      lockInMonths: Number(lockInMonths) || 1,
       note,
       couponPaymentDates: couponPaymentDatesRaw.split(',').map(d => d.trim()).filter(Boolean),
       stocks: stocks.map(s => ({
@@ -449,6 +455,18 @@ Important Rules for stock calculations:
               <option value="Monthly">每月觀察 (Monthly)</option>
               <option value="Quarterly">每季觀察 (Quarterly)</option>
             </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="fcn-lock-in">合約閉鎖期 (月數)</label>
+            <input 
+              id="fcn-lock-in"
+              type="number"
+              min="0"
+              placeholder="例如: 1" 
+              value={lockInMonths} 
+              onChange={e => setLockInMonths(e.target.value)} 
+            />
           </div>
 
           <div className="form-group">

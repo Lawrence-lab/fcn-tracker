@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh }) {
+export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh, onTestLine }) {
   const [expandedId, setExpandedId] = useState(null);
   const [search, setSearch] = useState('');
   const [refreshing, setRefreshing] = useState(false);
