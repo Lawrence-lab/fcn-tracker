@@ -424,32 +424,65 @@ app.post('/api/fcns/refresh', (req, res) => {
   res.json({ message: 'Stock price cache cleared successfully' });
 });
 
-// Helper to send push message using LINE Messaging API
+// LINE Webhook to assist in getting user IDs or group IDs
+app.post('/api/line/webhook', (req, res) => {
+  console.log('--- LINE Webhook Received ---');
+  console.log(JSON.stringify(req.body, null, 2));
+  
+  // Extra helper log to easily copy-paste IDs from Zeabur console
+  const events = req.body?.events || [];
+  events.forEach(evt => {
+    const source = evt.source || {};
+    if (source.type === 'user') {
+      console.log(`Detected User ID (加好友傳訊): ${source.userId}`);
+    } else if (source.type === 'group') {
+      console.log(`Detected Group ID (群組識別碼): ${source.groupId}`);
+    }
+  });
+  
+  res.sendStatus(200);
+});
+
+// Helper to send push message using LINE Messaging API (Supports multicast for multiple users)
 async function sendLineNotification(message) {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-  const userId = process.env.LINE_USER_ID;
+  const userIdEnv = process.env.LINE_USER_ID;
 
-  if (!token || !userId) {
+  if (!token || !userIdEnv) {
     console.log('[LINE] Skip notification: LINE_CHANNEL_ACCESS_TOKEN or LINE_USER_ID not configured in environment variables.');
     return;
   }
 
+  // Support multiple user IDs separated by commas
+  const targetIds = userIdEnv.split(',').map(id => id.trim()).filter(Boolean);
+  if (targetIds.length === 0) return;
+
+  const isMulticast = targetIds.length > 1;
+  const url = isMulticast ? 'https://api.line.me/v2/bot/message/multicast' : 'https://api.line.me/v2/bot/message/push';
+
+  const body = {
+    messages: [
+      {
+        type: 'text',
+        text: message
+      }
+    ]
+  };
+
+  if (isMulticast) {
+    body.to = targetIds; // array of IDs
+  } else {
+    body.to = targetIds[0]; // single string ID (User or Group)
+  }
+
   try {
-    const response = await fetch('https://api.line.me/v2/bot/message/push', {
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({
-        to: userId,
-        messages: [
-          {
-            type: 'text',
-            text: message
-          }
-        ]
-      })
+      body: JSON.stringify(body)
     });
 
     if (!response.ok) {
@@ -457,7 +490,7 @@ async function sendLineNotification(message) {
       throw new Error(`LINE API returned status ${response.status}: ${errText}`);
     }
 
-    console.log('[LINE] Notification sent successfully!');
+    console.log(`[LINE] Notification sent successfully! (Recipient count: ${targetIds.length}, Type: ${isMulticast ? 'Multicast' : 'Push'})`);
   } catch (err) {
     console.error('[LINE] Failed to send notification:', err.message);
   }
