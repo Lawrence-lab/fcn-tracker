@@ -327,8 +327,8 @@ export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh })
 
                   <div className="fcn-val">
                     <span className="fcn-val-label">狀態</span>
-                    <span className={`fcn-badge ${item.isKnockedIn ? 'stock' : 'active'}`}>
-                      {item.isKnockedIn ? '已觸及 KI ⚠️' : '觀察中'}
+                    <span className={`fcn-badge ${item.isKoTriggered ? 'ko-triggered' : item.isKnockedIn ? 'stock' : 'active'}`}>
+                      {item.isKoTriggered ? '🌟 已達 KO 條件' : item.isKnockedIn ? '已觸及 KI ⚠️' : '觀察中'}
                     </span>
                   </div>
 
@@ -402,8 +402,8 @@ export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh })
                           }}>
                             刪除商品
                           </button>
-                          <button className="action-btn settle" onClick={() => onSettle(item)}>
-                            辦理結算平倉
+                          <button className={`action-btn settle ${item.isKoTriggered ? 'ko-highlight' : ''}`} onClick={() => onSettle(item)}>
+                            {item.isKoTriggered ? '⚡ 辦理敲出結算' : '辦理結算平倉'}
                           </button>
                         </div>
                       </div>

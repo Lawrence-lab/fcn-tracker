@@ -125,7 +125,16 @@ export default function App() {
   // Open Settle Modal
   const handleOpenSettle = (fcn) => {
     setSettlingFcn(fcn);
-    setSettleType('Knocked-Out');
+    
+    // Dynamically pre-select settlement type based on contract triggers
+    if (fcn.isKoTriggered) {
+      setSettleType('Knocked-Out');
+    } else if (fcn.isKnockedIn) {
+      setSettleType('Matured-Stock');
+    } else {
+      setSettleType('Matured-Cash');
+    }
+
     setSettleDate(new Date().toISOString().split('T')[0]);
     setTotalCoupons('');
     setSettleNote('');

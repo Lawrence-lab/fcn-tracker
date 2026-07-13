@@ -37,6 +37,7 @@ export default function Dashboard({ fcns }) {
 
   // Count special states
   const kiCount = activeFcns.filter(f => f.isKnockedIn).length;
+  const koTriggeredFcns = activeFcns.filter(f => f.isKoTriggered);
   
   // Identify high risk items
   const dangerStocks = [];
@@ -82,6 +83,33 @@ export default function Dashboard({ fcns }) {
 
   return (
     <div className="dashboard-container">
+      {/* KO Alerts */}
+      {koTriggeredFcns.length > 0 && (
+        <div className="alerts-section" style={{ border: '1px solid #10b981', background: 'rgba(16, 185, 129, 0.05)', marginBottom: '1.5rem' }}>
+          <div className="alerts-header" style={{ color: '#10b981' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            <span>🌟 提前敲出提醒：以下商品已滿足每日敲出 (KO) 條件 ({koTriggeredFcns.length})</span>
+          </div>
+          <div className="alerts-list">
+            {koTriggeredFcns.map((item, idx) => (
+              <div key={`${item.id}-${idx}`} className="alert-item" style={{ borderBottom: '1px solid rgba(16, 185, 129, 0.1)' }}>
+                <div>
+                  <span className="alert-name" style={{ color: '#10b981' }}>{item.name}</span>
+                  <span style={{ margin: '0 0.5rem', color: 'var(--text-muted)' }}>|</span>
+                  <span>所有連結標的皆高於敲出價 (KO 門檻: {item.stocks?.[0]?.koPercent}%)</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <span style={{ color: '#10b981', fontWeight: 700 }}>請至商品列表辦理結算</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Risk Warning Center */}
       {dangerStocks.length > 0 && (
         <div className="alerts-section">

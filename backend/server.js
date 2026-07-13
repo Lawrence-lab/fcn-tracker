@@ -306,10 +306,14 @@ app.get('/api/fcns', async (req, res) => {
         autoKiTriggered = true; // Auto-trip the flag
       }
 
+      // Check for automatic KO trigger (all active stocks are >= koPercent)
+      const isKoTriggered = enrichedStocks.length > 0 && enrichedStocks.every(s => s.currentPercent !== null && s.currentPercent >= s.koPercent);
+
       return {
         ...fcn,
         stocks: enrichedStocks,
         isKnockedIn: autoKiTriggered,
+        isKoTriggered: isKoTriggered,
         worstStockSymbol: worstStock ? worstStock.symbol : null,
         worstStockPercent: worstStock ? worstStock.currentPercent : null
       };
@@ -403,6 +407,7 @@ async function evaluateFCNTriggers() {
     if (fcn.status !== 'Active') continue;
     
     let modified = false;
+    let allStocksAboveKo = true;
     
     for (let stock of fcn.stocks) {
       try {
@@ -417,12 +422,24 @@ async function evaluateFCNTriggers() {
             modified = true;
             console.log(`[Auto-Trigger] FCN "${fcn.name}" has knocked-in because stock ${stock.symbol} touched ${currentPercent.toFixed(2)}% (KI barrier is ${kiPercent}%)`);
           }
+
+          if (currentPercent < stock.koPercent) {
+            allStocksAboveKo = false;
+          }
+        } else {
+          allStocksAboveKo = false;
         }
       } catch (err) {
+        allStocksAboveKo = false;
         console.error(`Error checking triggers for stock ${stock.symbol} in FCN "${fcn.name}":`, err.message);
       }
     }
     
+    if (allStocksAboveKo) {
+      console.log(`[Auto-Trigger Alert] FCN "${fcn.name}" has met KO (Knock-out) conditions. All underlying stocks are at or above their KO barriers.`);
+      // Future hook: Trigger LINE Notify here
+    }
+
     if (modified) {
       modifiedCount++;
     }
