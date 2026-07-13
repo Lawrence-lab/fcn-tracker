@@ -537,6 +537,10 @@ async function evaluateFCNTriggers() {
             fcn.isKnockedIn = true;
             modified = true;
             console.log(`[Auto-Trigger] FCN "${fcn.name}" has knocked-in because stock ${stock.symbol} touched ${currentPercent.toFixed(2)}% (KI barrier is ${kiPercent}%)`);
+            
+            // Send LINE notification for KI trigger
+            const kiMsg = `⚠️ FCN 敲入警報！\n\n您的商品「${fcn.name}」連結標的 ${stock.symbol} 目前價格跌至期初價的 ${currentPercent.toFixed(2)}%，已跌破敲入門檻 (${kiPercent}%)！\n\n請登入系統查看風險狀況：\nhttps://fcn-tracking.zeabur.app/`;
+            await sendLineNotification(kiMsg);
           }
 
           if (currentPercent < stock.koPercent) {
