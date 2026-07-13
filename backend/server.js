@@ -38,8 +38,8 @@ app.use(express.json());
 app.use((req, res, next) => {
   const writeMethods = ['POST', 'PUT', 'DELETE'];
   if (writeMethods.includes(req.method)) {
-    // Skip password check for price sync and LINE test operations
-    if (req.path === '/api/fcns/refresh' || req.path === '/api/fcns/evaluate' || req.path === '/api/fcns/test-line') {
+    // Skip password check for price sync, LINE test, and LINE Webhook operations
+    if (req.path === '/api/fcns/refresh' || req.path === '/api/fcns/evaluate' || req.path === '/api/fcns/test-line' || req.path === '/api/line/webhook') {
       return next();
     }
     const clientPassword = req.headers['x-admin-password'];
