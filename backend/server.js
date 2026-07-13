@@ -24,7 +24,7 @@ app.use((req, res, next) => {
       return next();
     }
     const clientPassword = req.headers['x-admin-password'];
-    if (clientPassword !== '970929') {
+    if (clientPassword !== '940929') {
       return res.status(403).json({ error: '密碼錯誤，操作被拒絕！' });
     }
   }

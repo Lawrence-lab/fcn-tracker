@@ -25,7 +25,7 @@ export default function App() {
   const verifyAdminPassword = () => {
     const pwd = prompt('🔒 請輸入管理密碼以執行此操作：');
     if (pwd === null) return null; // User clicked cancel
-    if (pwd !== '970929') {
+    if (pwd !== '940929') {
       alert('❌ 密碼錯誤，拒絕執行！');
       return null;
     }
