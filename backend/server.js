@@ -395,6 +395,45 @@ app.post('/api/fcns/refresh', (req, res) => {
   res.json({ message: 'Stock price cache cleared successfully' });
 });
 
+// Helper to send push message using LINE Messaging API
+async function sendLineNotification(message) {
+  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  const userId = process.env.LINE_USER_ID;
+
+  if (!token || !userId) {
+    console.log('[LINE] Skip notification: LINE_CHANNEL_ACCESS_TOKEN or LINE_USER_ID not configured in environment variables.');
+    return;
+  }
+
+  try {
+    const response = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        to: userId,
+        messages: [
+          {
+            type: 'text',
+            text: message
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`LINE API returned status ${response.status}: ${errText}`);
+    }
+
+    console.log('[LINE] Notification sent successfully!');
+  } catch (err) {
+    console.error('[LINE] Failed to send notification:', err.message);
+  }
+}
+
 // Helper to evaluate KI and KO triggers for active FCNs
 async function evaluateFCNTriggers() {
   console.log('Running FCN price and trigger evaluation...');
@@ -437,7 +476,9 @@ async function evaluateFCNTriggers() {
     
     if (allStocksAboveKo) {
       console.log(`[Auto-Trigger Alert] FCN "${fcn.name}" has met KO (Knock-out) conditions. All underlying stocks are at or above their KO barriers.`);
-      // Future hook: Trigger LINE Notify here
+      
+      const msg = `🔔 FCN 敲出提醒！\n\n您的商品「${fcn.name}」所有標的皆已高於敲出水位 (${fcn.stocks?.[0]?.koPercent}%)，已滿足每日敲出條件 (KO)！\n\n請登入系統辦理結算平倉：\nhttps://fcn-tracking.zeabur.app/`;
+      await sendLineNotification(msg);
     }
 
     if (modified) {
