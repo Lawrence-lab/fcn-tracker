@@ -21,6 +21,7 @@ export default function FCNForm({ editingFcn, onSubmit, onCancel }) {
   const [maturityDate, setMaturityDate] = useState('');
   const [observationFrequency, setObservationFrequency] = useState('Monthly');
   const [isKnockedIn, setIsKnockedIn] = useState(false);
+  const [isEuropeanKi, setIsEuropeanKi] = useState(true);
   const [lockInMonths, setLockInMonths] = useState(1);
   const [note, setNote] = useState('');
   const [stocks, setStocks] = useState([emptyStock()]);
@@ -212,6 +213,7 @@ Important Rules for stock calculations:
       setMaturityDate(editingFcn.maturityDate || '');
       setObservationFrequency(editingFcn.observationFrequency || 'Monthly');
       setIsKnockedIn(editingFcn.isKnockedIn || false);
+      setIsEuropeanKi(editingFcn.isEuropeanKi !== undefined ? editingFcn.isEuropeanKi : true);
       setLockInMonths(editingFcn.lockInMonths !== undefined ? editingFcn.lockInMonths : 1);
       setNote(editingFcn.note || '');
       setCouponPaymentDatesRaw(editingFcn.couponPaymentDates ? editingFcn.couponPaymentDates.join(', ') : '');
@@ -239,6 +241,7 @@ Important Rules for stock calculations:
       setMaturityDate('');
       setObservationFrequency('Monthly');
       setIsKnockedIn(false);
+      setIsEuropeanKi(true);
       setLockInMonths(1);
       setNote('');
       setCouponPaymentDatesRaw('');
@@ -292,6 +295,7 @@ Important Rules for stock calculations:
       maturityDate,
       observationFrequency,
       isKnockedIn,
+      isEuropeanKi,
       lockInMonths: Number(lockInMonths) || 1,
       note,
       couponPaymentDates: couponPaymentDatesRaw.split(',').map(d => d.trim()).filter(Boolean),
@@ -511,6 +515,18 @@ Important Rules for stock calculations:
             <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '-0.25rem' }}>
               這將用於在「預期利息收入」中排定精確的配息日，AI 辨識圖片後會自動為您填寫。
             </small>
+          </div>
+
+          <div className="form-group">
+            <div className="checkbox-group">
+              <input 
+                id="fcn-european-ki"
+                type="checkbox" 
+                checked={isEuropeanKi} 
+                onChange={e => setIsEuropeanKi(e.target.checked)} 
+              />
+              <label htmlFor="fcn-european-ki">歐式敲入 (EKI / 僅到期日觀察價格是否需要接股)</label>
+            </div>
           </div>
 
           <div className="form-group">

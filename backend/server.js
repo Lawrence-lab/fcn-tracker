@@ -319,9 +319,10 @@ app.get('/api/fcns', async (req, res) => {
         }
       }
 
-      // Check for automatic KI trigger
+      // Check for automatic KI trigger (skip for European KI during the term)
       let autoKiTriggered = fcn.isKnockedIn;
-      if (!autoKiTriggered && worstStock && worstStock.currentPercent <= worstStock.kiPercent) {
+      const isEuropeanKi = fcn.isEuropeanKi !== undefined ? fcn.isEuropeanKi : true;
+      if (!isEuropeanKi && !autoKiTriggered && worstStock && worstStock.currentPercent <= worstStock.kiPercent) {
         autoKiTriggered = true; // Auto-trip the flag
       }
 
@@ -343,6 +344,7 @@ app.get('/api/fcns', async (req, res) => {
         stocks: enrichedStocks,
         isKnockedIn: autoKiTriggered,
         isKoTriggered: isKoTriggered,
+        isEuropeanKi: isEuropeanKi,
         worstStockSymbol: worstStock ? worstStock.symbol : null,
         worstStockPercent: worstStock ? worstStock.currentPercent : null
       };
@@ -524,16 +526,31 @@ async function evaluateFCNTriggers() {
     }
 
     let allStocksAboveKo = hasObservationStarted;
+    let worstStock = null;
     
     for (let stock of fcn.stocks) {
       try {
         const market = await getStockPrice(stock.symbol);
         if (market.price !== null) {
           const currentPercent = (market.price / stock.initialPrice) * 100;
+          const stockName = market.name || stock.name || stock.symbol;
           
-          // Check if this stock touched KI (Knock-In)
+          const stockPerformance = {
+            symbol: stock.symbol,
+            name: stockName,
+            currentPercent,
+            strikePercent: stock.strikePercent,
+            kiPercent: stock.kiPercent
+          };
+          
+          if (!worstStock || currentPercent < worstStock.currentPercent) {
+            worstStock = stockPerformance;
+          }
+          
+          // Check if this stock touched KI (Knock-In) (skip for European KI during the term)
+          const isEuropeanKi = fcn.isEuropeanKi !== undefined ? fcn.isEuropeanKi : true;
           const kiPercent = stock.kiPercent;
-          if (kiPercent > 0 && currentPercent <= kiPercent && !fcn.isKnockedIn) {
+          if (!isEuropeanKi && kiPercent > 0 && currentPercent <= kiPercent && !fcn.isKnockedIn) {
             fcn.isKnockedIn = true;
             modified = true;
             console.log(`[Auto-Trigger] FCN "${fcn.name}" has knocked-in because stock ${stock.symbol} touched ${currentPercent.toFixed(2)}% (KI barrier is ${kiPercent}%)`);
@@ -560,6 +577,30 @@ async function evaluateFCNTriggers() {
       
       const msg = `🔔 FCN 敲出提醒！\n\n您的商品「${fcn.name}」所有標的皆已高於敲出水位 (${fcn.stocks?.[0]?.koPercent}%)，已滿足每日敲出條件 (KO)！\n\n請登入系統辦理結算平倉：\nhttps://fcn-tracking.zeabur.app/`;
       await sendLineNotification(msg);
+    }
+
+    // Check if today is the maturity date (Taipei Time) to send a LINE reminder
+    if (fcn.maturityDate) {
+      const todayStr = new Date().toLocaleDateString('zh-TW', {
+        timeZone: 'Asia/Taipei',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).replace(/\//g, '-');
+
+      if (fcn.maturityDate === todayStr) {
+        console.log(`[Maturity Alert] FCN "${fcn.name}" has reached maturity date: ${fcn.maturityDate}`);
+        
+        // EKI check: check if worst stock is below strikePercent at maturity
+        const isStrikeBreached = worstStock && worstStock.currentPercent <= worstStock.strikePercent;
+        const outcomeText = isStrikeBreached 
+          ? `⚠️ 最差標的 (${worstStock.symbol}) 已跌破履約價 (${worstStock.strikePercent}%)，到期將進行【實物交割 (接股)】。` 
+          : `🎉 所有標的皆高於履約價，到期將進行【現金全額收回】！`;
+
+        const msg = `🔔 FCN 到期提醒！\n\n您的商品「${fcn.name}」已於今日（${fcn.maturityDate}）達到合約到期日！\n\n最終標的表現：\n最差標的為 ${worstStock ? worstStock.symbol : '無'} (${worstStock ? worstStock.currentPercent.toFixed(2) : 0}%)\n\n${outcomeText}\n\n請登入系統辦理結算平倉：\nhttps://fcn-tracking.zeabur.app/`;
+        
+        await sendLineNotification(msg);
+      }
     }
 
     if (modified) {
