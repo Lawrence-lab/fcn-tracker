@@ -97,7 +97,7 @@ export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh, o
       } else {
         const last = mergedMarkers[mergedMarkers.length - 1];
         const avgPct = last.pctSum / last.count;
-        if (Math.abs(marker.pct - avgPct) < 3.0) {
+        if (Math.abs(marker.pct - avgPct) < 7.0) {
           last.pctSum += marker.pct;
           last.count += 1;
           last.keys.push(marker.key);
@@ -159,7 +159,7 @@ export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh, o
             {mergedMarkers.map((marker, idx) => {
               const avgPct = marker.pctSum / marker.count;
               const displayLabel = marker.count > 1 
-                ? `${marker.names.join('/')} ${marker.pcts[0].toFixed(0)}% (${marker.prices[0].toFixed(1)})`
+                ? `${marker.names.join('/')} ${marker.pcts[0].toFixed(0)}` + (marker.pcts[marker.count-1] !== marker.pcts[0] ? `-${marker.pcts[marker.count-1].toFixed(0)}%` : '%') + ` (${marker.prices[0].toFixed(1)}` + (marker.prices[marker.count-1] !== marker.prices[0] ? `-${marker.prices[marker.count-1].toFixed(1)}` : '') + `)`
                 : `${marker.names[0]} ${marker.pcts[0].toFixed(0)}% (${marker.prices[0].toFixed(1)})`;
               
               return (
