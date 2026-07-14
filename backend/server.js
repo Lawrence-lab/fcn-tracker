@@ -319,23 +319,41 @@ app.get('/api/fcns', async (req, res) => {
         }
       }
 
+      let dbModified = false;
+
       // Check for automatic KI trigger (skip for European KI during the term)
-      let autoKiTriggered = fcn.isKnockedIn;
+      let autoKiTriggered = fcn.isKnockedIn || false;
       const isEuropeanKi = fcn.isEuropeanKi !== undefined ? fcn.isEuropeanKi : true;
       if (!isEuropeanKi && !autoKiTriggered && worstStock && worstStock.currentPercent <= worstStock.kiPercent) {
         autoKiTriggered = true; // Auto-trip the flag
+        fcn.isKnockedIn = true;
+        dbModified = true;
       }
 
       // Check for automatic KO trigger (all active stocks are >= koPercent, and past lock-in period)
-      let isKoTriggered = false;
-      if (fcn.status === 'Active' && fcn.startDate && enrichedStocks.length > 0) {
+      let isKoTriggered = fcn.isKoTriggered || false;
+      if (!isKoTriggered && fcn.status === 'Active' && fcn.startDate && enrichedStocks.length > 0) {
         const lockInMonths = fcn.lockInMonths !== undefined ? Number(fcn.lockInMonths) : 1;
         const startDate = new Date(fcn.startDate);
         const koStartDate = new Date(startDate.setMonth(startDate.getMonth() + lockInMonths));
         const today = new Date();
         
         if (today >= koStartDate) {
-          isKoTriggered = enrichedStocks.every(s => s.currentPercent !== null && s.currentPercent >= s.koPercent);
+          const allStocksAboveKo = enrichedStocks.every(s => s.currentPercent !== null && s.currentPercent >= s.koPercent);
+          if (allStocksAboveKo) {
+            isKoTriggered = true;
+            fcn.isKoTriggered = true;
+            dbModified = true;
+          }
+        }
+      }
+
+      if (dbModified) {
+        // Find and update the original item inside the fcns array so it gets saved
+        const idx = fcns.findIndex(item => item.id === fcn.id);
+        if (idx !== -1) {
+          fcns[idx].isKnockedIn = fcn.isKnockedIn;
+          fcns[idx].isKoTriggered = fcn.isKoTriggered;
         }
       }
 
@@ -349,6 +367,13 @@ app.get('/api/fcns', async (req, res) => {
         worstStockPercent: worstStock ? worstStock.currentPercent : null
       };
     });
+
+    // Write back to DB if any persistent trigger status changed
+    const anyChanges = fcns.some(f => f.isKoTriggered === true && !f.isKoTriggered); // check if there was any actual modification
+    // Since we set dbModified, let's write if it is true
+    const hasModifications = fcns.some(f => f.isKoTriggered || f.isKnockedIn);
+    // To be perfectly safe, write back the array if dbModified was true
+    await writeFCNDb(fcns);
 
     res.json(enriched);
   } catch (error) {
@@ -368,6 +393,7 @@ app.post('/api/fcns', async (req, res) => {
     const db = await readFCNDb();
     newFcn.id = `fcn-${Date.now()}`;
     newFcn.isKnockedIn = newFcn.isKnockedIn || false;
+    newFcn.isKoTriggered = newFcn.isKoTriggered || false;
     newFcn.status = newFcn.status || 'Active';
     newFcn.createdAt = new Date().toISOString();
 

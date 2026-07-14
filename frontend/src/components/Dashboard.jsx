@@ -43,34 +43,47 @@ export default function Dashboard({ fcns }) {
   const dangerStocks = [];
   activeFcns.forEach(fcn => {
     if (!fcn.stocks) return;
-    fcn.stocks.forEach(stock => {
-      if (stock.currentPercent !== null) {
-        const distToKi = stock.currentPercent - stock.kiPercent;
-        if (fcn.isKnockedIn && stock.currentPercent <= stock.kiPercent) {
-          dangerStocks.push({
-            fcnId: fcn.id,
-            fcnName: fcn.name,
-            symbol: stock.symbol,
-            stockName: stock.name,
-            currentPercent: stock.currentPercent,
-            kiPercent: stock.kiPercent,
-            distToKi: distToKi,
-            status: '已敲入 (Breached KI)'
-          });
-        } else if (distToKi <= 5 && distToKi > 0) {
-          dangerStocks.push({
-            fcnId: fcn.id,
-            fcnName: fcn.name,
-            symbol: stock.symbol,
-            stockName: stock.name,
-            currentPercent: stock.currentPercent,
-            kiPercent: stock.kiPercent,
-            distToKi: distToKi,
-            status: `接近敲入點 (僅差 ${distToKi.toFixed(2)}%)`
-          });
-        }
+
+    if (fcn.isKnockedIn) {
+      // If the FCN has knocked-in (KI), we ALWAYS show its worst-performing stock as "已敲入"
+      // to remind the user of the permanent delivery risk, even if the price recovered back above KI.
+      const validStocks = fcn.stocks.filter(s => s.currentPercent !== null);
+      if (validStocks.length > 0) {
+        const worstStock = validStocks.reduce((prev, curr) => 
+          (curr.currentPercent < prev.currentPercent) ? curr : prev
+        );
+        const distToKi = worstStock.currentPercent - worstStock.kiPercent;
+        dangerStocks.push({
+          fcnId: fcn.id,
+          fcnName: fcn.name,
+          symbol: worstStock.symbol,
+          stockName: worstStock.name,
+          currentPercent: worstStock.currentPercent,
+          kiPercent: worstStock.kiPercent,
+          distToKi: distToKi,
+          status: '已敲入 (Breached KI)'
+        });
       }
-    });
+    } else {
+      // If not knocked-in, check if any stock is close to the KI barrier (within 5%)
+      fcn.stocks.forEach(stock => {
+        if (stock.currentPercent !== null) {
+          const distToKi = stock.currentPercent - stock.kiPercent;
+          if (distToKi <= 5 && distToKi > 0) {
+            dangerStocks.push({
+              fcnId: fcn.id,
+              fcnName: fcn.name,
+              symbol: stock.symbol,
+              stockName: stock.name,
+              currentPercent: stock.currentPercent,
+              kiPercent: stock.kiPercent,
+              distToKi: distToKi,
+              status: `接近敲入點 (僅差 ${distToKi.toFixed(2)}%)`
+            });
+          }
+        }
+      });
+    }
   });
 
   const formatCurrency = (val, cur) => {
