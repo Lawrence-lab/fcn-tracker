@@ -324,10 +324,26 @@ app.get('/api/fcns', async (req, res) => {
       // Check for automatic KI trigger (skip for European KI during the term)
       let autoKiTriggered = fcn.isKnockedIn || false;
       const isEuropeanKi = fcn.isEuropeanKi !== undefined ? fcn.isEuropeanKi : false;
-      if (!isEuropeanKi && !autoKiTriggered && worstStock && worstStock.currentPercent <= worstStock.kiPercent) {
-        autoKiTriggered = true; // Auto-trip the flag
-        fcn.isKnockedIn = true;
-        dbModified = true;
+      
+      if (!isEuropeanKi && enrichedStocks.length > 0) {
+        enrichedStocks.forEach(s => {
+          if (s.currentPercent !== null && s.kiPercent > 0) {
+            const isBelowKiNow = s.currentPercent <= s.kiPercent;
+            const origStock = fcn.stocks.find(os => os.symbol === s.symbol);
+            if (origStock) {
+              const wasBelowKi = origStock.wasBelowKi || false;
+              if (isBelowKiNow && !wasBelowKi) {
+                origStock.wasBelowKi = true;
+                fcn.isKnockedIn = true;
+                autoKiTriggered = true;
+                dbModified = true;
+              } else if (!isBelowKiNow && wasBelowKi) {
+                origStock.wasBelowKi = false;
+                dbModified = true;
+              }
+            }
+          }
+        });
       }
 
       // Check for automatic KO trigger (all active stocks are >= koPercent, and past lock-in period)
@@ -354,6 +370,7 @@ app.get('/api/fcns', async (req, res) => {
         if (idx !== -1) {
           fcns[idx].isKnockedIn = fcn.isKnockedIn;
           fcns[idx].isKoTriggered = fcn.isKoTriggered;
+          fcns[idx].stocks = fcn.stocks; // Update stocks array to persist wasBelowKi status
         }
       }
 
@@ -576,14 +593,24 @@ async function evaluateFCNTriggers() {
           // Check if this stock touched KI (Knock-In) (skip for European KI during the term)
           const isEuropeanKi = fcn.isEuropeanKi !== undefined ? fcn.isEuropeanKi : false;
           const kiPercent = stock.kiPercent;
-          if (!isEuropeanKi && kiPercent > 0 && currentPercent <= kiPercent && !fcn.isKnockedIn) {
-            fcn.isKnockedIn = true;
-            modified = true;
-            console.log(`[Auto-Trigger] FCN "${fcn.name}" has knocked-in because stock ${stock.symbol} touched ${currentPercent.toFixed(2)}% (KI barrier is ${kiPercent}%)`);
+          if (!isEuropeanKi && kiPercent > 0) {
+            const isBelowKiNow = currentPercent <= kiPercent;
+            const wasBelowKi = stock.wasBelowKi || false;
             
-            // Send LINE notification for KI trigger
-            const kiMsg = `⚠️ FCN 敲入警報！\n\n您的商品「${fcn.name}」連結標的 ${stock.symbol} 目前價格跌至期初價的 ${currentPercent.toFixed(2)}%，已跌破敲入門檻 (${kiPercent}%)！\n\n請登入系統查看風險狀況：\nhttps://fcn-tracking.zeabur.app/`;
-            await sendLineNotification(kiMsg);
+            if (isBelowKiNow && !wasBelowKi) {
+              stock.wasBelowKi = true;
+              fcn.isKnockedIn = true;
+              modified = true;
+              console.log(`[Auto-Trigger] FCN "${fcn.name}" stock ${stock.symbol} crossed below KI: ${currentPercent.toFixed(2)}% (barrier ${kiPercent}%)`);
+              
+              // Send LINE notification for KI trigger
+              const kiMsg = `⚠️ FCN 敲入警報！\n\n您的商品「${fcn.name}」連結標的 ${stock.symbol} 目前價格跌至期初價的 ${currentPercent.toFixed(2)}%，已跌破敲入門檻 (${kiPercent}%)！\n\n請登入系統查看風險狀況：\nhttps://fcn-tracking.zeabur.app/`;
+              await sendLineNotification(kiMsg);
+            } else if (!isBelowKiNow && wasBelowKi) {
+              stock.wasBelowKi = false;
+              modified = true;
+              console.log(`[Auto-Trigger] FCN "${fcn.name}" stock ${stock.symbol} recovered above KI: ${currentPercent.toFixed(2)}% (barrier ${kiPercent}%)`);
+            }
           }
 
           if (currentPercent < stock.koPercent) {
