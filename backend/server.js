@@ -707,6 +707,9 @@ cron.schedule('30 5 * * *', async () => {
   } catch (error) {
     console.error('Error in scheduled daily FCN evaluation:', error);
   }
+}, {
+  scheduled: true,
+  timezone: "Asia/Taipei"
 });
 
 // Serve frontend in production
