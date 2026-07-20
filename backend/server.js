@@ -590,27 +590,14 @@ async function evaluateFCNTriggers() {
             worstStock = stockPerformance;
           }
           
-          // Check if this stock touched KI (Knock-In) (skip for European KI during the term)
-          const isEuropeanKi = fcn.isEuropeanKi !== undefined ? fcn.isEuropeanKi : true;
+          // Check if stock closed below KI barrier (send daily LINE notification whenever below KI price)
           const kiPercent = stock.kiPercent;
-          if (!isEuropeanKi && kiPercent > 0) {
-            const isBelowKiNow = currentPercent <= kiPercent;
-            const wasBelowKi = stock.wasBelowKi || false;
+          if (kiPercent > 0 && currentPercent <= kiPercent) {
+            console.log(`[Daily KI Alert] FCN "${fcn.name}" stock ${stock.symbol} closed at ${currentPercent.toFixed(2)}% (below KI barrier ${kiPercent}%)`);
             
-            if (isBelowKiNow && !wasBelowKi) {
-              stock.wasBelowKi = true;
-              fcn.isKnockedIn = true;
-              modified = true;
-              console.log(`[Auto-Trigger] FCN "${fcn.name}" stock ${stock.symbol} crossed below KI: ${currentPercent.toFixed(2)}% (barrier ${kiPercent}%)`);
-              
-              // Send LINE notification for KI trigger
-              const kiMsg = `⚠️ FCN 敲入警報！\n\n您的商品「${fcn.name}」連結標的 ${stock.symbol} 目前價格跌至期初價的 ${currentPercent.toFixed(2)}%，已跌破敲入門檻 (${kiPercent}%)！\n\n請登入系統查看風險狀況：\nhttps://fcn-tracking.zeabur.app/`;
-              await sendLineNotification(kiMsg);
-            } else if (!isBelowKiNow && wasBelowKi) {
-              stock.wasBelowKi = false;
-              modified = true;
-              console.log(`[Auto-Trigger] FCN "${fcn.name}" stock ${stock.symbol} recovered above KI: ${currentPercent.toFixed(2)}% (barrier ${kiPercent}%)`);
-            }
+            // Send LINE notification for daily KI trigger
+            const kiMsg = `⚠️ FCN 敲入警報！\n\n您的商品「${fcn.name}」連結標的 ${stock.symbol} 今日收盤價跌至期初價的 ${currentPercent.toFixed(2)}%，低於 KI 門檻 (${kiPercent}%)！\n\n請登入系統查看風險狀況：\nhttps://fcn-tracking.zeabur.app/`;
+            await sendLineNotification(kiMsg);
           }
 
           if (currentPercent < stock.koPercent) {
