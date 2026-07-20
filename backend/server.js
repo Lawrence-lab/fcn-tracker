@@ -323,7 +323,7 @@ app.get('/api/fcns', async (req, res) => {
 
       // Check for automatic KI trigger (skip for European KI during the term)
       let autoKiTriggered = fcn.isKnockedIn || false;
-      const isEuropeanKi = fcn.isEuropeanKi !== undefined ? fcn.isEuropeanKi : false;
+      const isEuropeanKi = fcn.isEuropeanKi !== undefined ? fcn.isEuropeanKi : true;
       
       if (!isEuropeanKi && enrichedStocks.length > 0) {
         enrichedStocks.forEach(s => {
@@ -591,7 +591,7 @@ async function evaluateFCNTriggers() {
           }
           
           // Check if this stock touched KI (Knock-In) (skip for European KI during the term)
-          const isEuropeanKi = fcn.isEuropeanKi !== undefined ? fcn.isEuropeanKi : false;
+          const isEuropeanKi = fcn.isEuropeanKi !== undefined ? fcn.isEuropeanKi : true;
           const kiPercent = stock.kiPercent;
           if (!isEuropeanKi && kiPercent > 0) {
             const isBelowKiNow = currentPercent <= kiPercent;

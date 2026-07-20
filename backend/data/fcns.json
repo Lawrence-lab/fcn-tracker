@@ -70,7 +70,7 @@
     "maturityDate": "2026-08-03",
     "observationFrequency": "Monthly",
     "isKnockedIn": false,
-    "isEuropeanKi": false,
+    "isEuropeanKi": true,
     "note": "FCN contract with a 6-month tenor, 29.16% annual coupon rate, and 105%/55%/65% barrier levels on NVDA, TSM, MSTR, and OKLO.",
     "couponPaymentDates": [
       "2026-03-09",
@@ -131,7 +131,7 @@
     "observationFrequency": "Monthly",
     "isKnockedIn": false,
     "lockInMonths": 4,
-    "isEuropeanKi": false,
+    "isEuropeanKi": true,
     "note": "12M FCN with 4-month lock-in period (closed period). Monthly coupon is USD 832.92. KO observations start on 2025-08-24.",
     "couponPaymentDates": [
       "2026-05-29",
@@ -189,7 +189,7 @@
     "maturityDate": "2026-12-03",
     "observationFrequency": "Monthly",
     "isKnockedIn": false,
-    "isEuropeanKi": false,
+    "isEuropeanKi": true,
     "note": "6-month FCN contract linked to MU, NVDA, and WOLF with an annual coupon rate of 41.31% and a principal of 30,000 USD.",
     "couponPaymentDates": [
       "2026-07-08",
