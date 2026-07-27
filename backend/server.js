@@ -418,36 +418,18 @@ app.get('/api/exchange-rate', async (req, res) => {
 
 // Diagnostic route to test Yahoo Finance subdomains on cloud
 app.get('/api/test-spark', async (req, res) => {
-  const subdomains = [
-    'query1.finance.yahoo.com',
-    'query2.finance.yahoo.com',
-    'query3.finance.yahoo.com',
-    'query4.finance.yahoo.com',
-    'query5.finance.yahoo.com',
-    'query-v2.finance.yahoo.com'
-  ];
-  const results = [];
-  for (const sub of subdomains) {
-    const url = `https://${sub}/v7/finance/spark?symbols=MSTR&range=1d&interval=5m`;
-    try {
-      const response = await fetchWithTimeout(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
-        }
-      }, 3000);
-      results.push({
-        subdomain: sub,
-        status: response.status,
-        statusText: response.statusText
-      });
-    } catch (err) {
-      results.push({
-        subdomain: sub,
-        error: err.message
-      });
-    }
+  try {
+    const info = await getStockPriceGoogle('TSM');
+    res.json({
+      success: true,
+      info
+    });
+  } catch (err) {
+    res.json({
+      success: false,
+      error: err.message
+    });
   }
-  res.json(results);
 });
 
 // 1. Get all FCNs with dynamic stock prices
