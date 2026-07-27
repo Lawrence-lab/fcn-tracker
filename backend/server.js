@@ -335,11 +335,9 @@ app.get('/api/exchange-rate', async (req, res) => {
   }
 });
 
-// Diagnostic route to test Spark API live on cloud
+// Diagnostic route to test Google Finance live on cloud
 app.get('/api/test-spark', async (req, res) => {
-  const symbols = ['MSTR', 'OKLO', 'SOXX', 'AVGO'];
-  const symbolList = symbols.join(',');
-  const url = `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${encodeURIComponent(symbolList)}&range=1d&interval=5m`;
+  const url = 'https://www.google.com/finance/quote/TSM:NYSE';
   try {
     const response = await fetchWithTimeout(url, {
       headers: {
