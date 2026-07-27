@@ -687,8 +687,8 @@ app.post('/api/fcns/test-line', async (req, res) => {
   }
 });
 
-// Schedule daily FCN trigger checks at 5:30 AM (Asia/Taipei time)
-cron.schedule('30 5 * * *', async () => {
+// Schedule daily FCN trigger checks at 5:30 AM (Asia/Taipei time, Tuesday through Saturday only)
+cron.schedule('30 5 * * 2-6', async () => {
   try {
     await evaluateFCNTriggers();
   } catch (error) {
