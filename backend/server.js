@@ -295,18 +295,22 @@ app.get('/api/fcns', async (req, res) => {
       }
     });
 
-    // Fetch prices in parallel
+    // Fetch prices sequentially with a small delay to prevent Yahoo Finance rate limits
     const priceMap = {};
-    await Promise.all(
-      Array.from(symbols).map(async (symbol) => {
-        try {
-          const info = await getStockPrice(symbol);
-          priceMap[symbol] = info;
-        } catch (error) {
-          priceMap[symbol] = { price: null, prevClose: null, error: error.message };
-        }
-      })
-    );
+    const symbolArray = Array.from(symbols);
+    for (let i = 0; i < symbolArray.length; i++) {
+      const symbol = symbolArray[i];
+      // Add a 500ms delay between requests to avoid triggering rate limiting on burst queries
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      try {
+        const info = await getStockPrice(symbol);
+        priceMap[symbol] = info;
+      } catch (error) {
+        priceMap[symbol] = { price: null, prevClose: null, error: error.message };
+      }
+    }
 
     // Enrich FCN data with current calculations
     let anyDbModified = false;
