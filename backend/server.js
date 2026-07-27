@@ -133,6 +133,75 @@ async function getStockPriceNasdaq(symbol) {
   }
 }
 
+// Helper to fetch price from Google Finance as the primary stable source on cloud IP
+async function getStockPriceGoogle(symbol) {
+  const sym = symbol.trim().toUpperCase();
+  let querySymbol = sym;
+  
+  if (!sym.includes(':')) {
+    const exchange = ['TSM', 'OKLO', 'WOLF'].includes(sym) ? 'NYSE' : 'NASDAQ';
+    querySymbol = `${sym}:${exchange}`;
+  }
+
+  try {
+    const info = await fetchGoogleFinance(querySymbol);
+    if (info) return info;
+  } catch (err) {
+    console.warn(`[Google Finance] Failed for ${querySymbol}:`, err.message);
+  }
+
+  // Fallback to alternate exchange if not already specified with colon
+  if (!sym.includes(':')) {
+    const origExchange = ['TSM', 'OKLO', 'WOLF'].includes(sym) ? 'NYSE' : 'NASDAQ';
+    const altExchange = origExchange === 'NASDAQ' ? 'NYSE' : 'NASDAQ';
+    const altQuerySymbol = `${sym}:${altExchange}`;
+    try {
+      const info = await fetchGoogleFinance(altQuerySymbol);
+      if (info) return info;
+    } catch (err) {
+      console.warn(`[Google Finance] Alternate failed for ${altQuerySymbol}:`, err.message);
+    }
+  }
+
+  throw new Error(`Google Finance price not found for ${symbol}`);
+}
+
+async function fetchGoogleFinance(querySymbol) {
+  const url = `https://www.google.com/finance/quote/${encodeURIComponent(querySymbol)}`;
+  const response = await fetchWithTimeout(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+    }
+  }, 4000);
+
+  if (!response.ok) {
+    throw new Error(`HTTP error ${response.status} from Google Finance`);
+  }
+
+  const html = await response.text();
+  const regex = /\[\[\[\[null,\["([A-Z0-9\.]+)","([A-Z0-9\.]+)"\]\],null,([\d\.]+),(?:"[^"]*"|null),([\d\.]+)/;
+  const match = html.match(regex);
+
+  if (!match) {
+    throw new Error('Regex match failed on Google Finance page');
+  }
+
+  const price = parseFloat(match[3]);
+  const prevClose = parseFloat(match[4]);
+  
+  if (isNaN(price)) {
+    throw new Error('Parsed price is NaN');
+  }
+
+  return {
+    price,
+    prevClose,
+    name: querySymbol.split(':')[0],
+    currency: 'USD',
+    updatedAt: new Date().toISOString()
+  };
+}
+
 // Helper to fetch price from Yahoo Finance
 async function getStockPrice(symbol) {
   const normalizedSymbol = symbol.trim().toUpperCase();
@@ -141,6 +210,18 @@ async function getStockPrice(symbol) {
 
   if (cached && (now - cached.timestamp < CACHE_DURATION_MS)) {
     return cached.data;
+  }
+
+  // Try Google Finance first
+  try {
+    const googleInfo = await getStockPriceGoogle(normalizedSymbol);
+    priceCache.set(normalizedSymbol, {
+      timestamp: now,
+      data: googleInfo
+    });
+    return googleInfo;
+  } catch (googleErr) {
+    console.warn(`[Price Engine] Google Finance failed for ${symbol}, falling back to Yahoo:`, googleErr.message);
   }
 
   // Stagger requests to avoid concurrent burst rate limits on cloud IP
