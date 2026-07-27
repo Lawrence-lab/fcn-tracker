@@ -309,6 +309,9 @@ let exchangeRateCache = {
 };
 const EX_CACHE_DURATION = 60 * 60 * 1000;
 
+// Global lock to prevent multiple background fetches from running concurrently
+let isFetchingPrices = false;
+
 app.get('/api/exchange-rate', async (req, res) => {
   const now = Date.now();
   if (now - exchangeRateCache.timestamp < EX_CACHE_DURATION) {
@@ -370,59 +373,75 @@ app.get('/api/fcns', async (req, res) => {
       }
     });
 
-    // Fetch prices using bulk Spark API with robust fallback checks
+    // Fetch prices using Stale-While-Revalidate (SWR) non-blocking revalidation
     const now = Date.now();
     const symbolsToFetch = [];
     const priceMap = {};
 
-    // Check what is in the cache first
+    // 1. Build priceMap immediately using cached data (even if expired)
     Array.from(symbols).forEach(symbol => {
       const cached = priceCache.get(symbol);
-      if (cached && (now - cached.timestamp < CACHE_DURATION_MS)) {
+      if (cached) {
         priceMap[symbol] = cached.data;
+        // If cache is expired, queue symbol for background revalidation
+        if (now - cached.timestamp >= CACHE_DURATION_MS) {
+          symbolsToFetch.push(symbol);
+        }
       } else {
+        // If not cached at all, we must fetch it in the background
         symbolsToFetch.push(symbol);
       }
     });
 
-    // If there are symbols to fetch, load them in bulk using Spark API
-    if (symbolsToFetch.length > 0) {
-      try {
-        console.log(`[Price Engine] Fetching ${symbolsToFetch.length} stock prices in bulk: ${symbolsToFetch.join(', ')}`);
-        const bulkResults = await fetchBulkStockPrices(symbolsToFetch);
-        
-        // Populate cache and priceMap for successfully fetched symbols
-        symbolsToFetch.forEach(symbol => {
-          if (bulkResults[symbol]) {
-            const stockInfo = bulkResults[symbol];
-            priceCache.set(symbol, {
-              timestamp: now,
-              data: stockInfo
-            });
-            priceMap[symbol] = stockInfo;
+    // 2. Trigger background revalidation if needed and not already running
+    if (symbolsToFetch.length > 0 && !isFetchingPrices) {
+      isFetchingPrices = true;
+      // Float the promise in the background so we do NOT block the HTTP response
+      (async () => {
+        try {
+          console.log(`[Background Fetch] Revalidating ${symbolsToFetch.length} stock prices in bulk: ${symbolsToFetch.join(', ')}`);
+          const bulkResults = await fetchBulkStockPrices(symbolsToFetch);
+          
+          // Populate cache for successfully fetched symbols
+          symbolsToFetch.forEach(symbol => {
+            if (bulkResults[symbol]) {
+              priceCache.set(symbol, {
+                timestamp: Date.now(),
+                data: bulkResults[symbol]
+              });
+            }
+          });
+
+          // Run staggered fallback for any symbols that failed bulk load
+          for (let i = 0; i < symbolsToFetch.length; i++) {
+            const symbol = symbolsToFetch[i];
+            if (!bulkResults[symbol]) {
+              if (i > 0) {
+                await new Promise(resolve => setTimeout(resolve, 300));
+              }
+              try {
+                console.log(`[Background Fetch] Running fallback query for ${symbol}...`);
+                const info = await getStockPrice(symbol);
+                priceCache.set(symbol, {
+                  timestamp: Date.now(),
+                  data: info
+                });
+              } catch (err) {
+                console.warn(`[Background Fetch] Fallback failed for ${symbol}:`, err.message);
+                // Cache the error for 3 minutes to avoid hammering Yahoo Finance
+                priceCache.set(symbol, {
+                  timestamp: Date.now() - (CACHE_DURATION_MS - 3 * 60 * 1000), // Expirable in 3 mins
+                  data: { price: null, prevClose: null, error: err.message }
+                });
+              }
+            }
           }
-        });
-      } catch (bulkError) {
-        console.error('[Price Engine] Bulk fetch failed, falling back to individual fetching:', bulkError.message);
-      }
-      
-      // Fallback for any symbols that were NOT successfully populated (staggered sequential fetch)
-      for (let i = 0; i < symbolsToFetch.length; i++) {
-        const symbol = symbolsToFetch[i];
-        if (!priceMap[symbol]) {
-          // If fallback sequence is needed, add spacing
-          if (i > 0) {
-            await new Promise(resolve => setTimeout(resolve, 300));
-          }
-          try {
-            console.log(`[Price Engine] Running individual fallback fetch for ${symbol}...`);
-            const info = await getStockPrice(symbol);
-            priceMap[symbol] = info;
-          } catch (error) {
-            priceMap[symbol] = { price: null, prevClose: null, error: error.message };
-          }
+        } catch (bulkError) {
+          console.error('[Background Fetch] Bulk revalidation failed:', bulkError.message);
+        } finally {
+          isFetchingPrices = false;
         }
-      }
+      })();
     }
 
     // Enrich FCN data with current calculations
