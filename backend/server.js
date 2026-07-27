@@ -278,6 +278,7 @@ app.get('/api/fcns', async (req, res) => {
     );
 
     // Enrich FCN data with current calculations
+    let anyDbModified = false;
     const enriched = fcns.map(fcn => {
       if (!fcn.stocks) return fcn;
 
@@ -376,6 +377,7 @@ app.get('/api/fcns', async (req, res) => {
       }
 
       if (dbModified) {
+        anyDbModified = true;
         // Find and update the original item inside the fcns array so it gets saved
         const idx = fcns.findIndex(item => item.id === fcn.id);
         if (idx !== -1) {
@@ -397,11 +399,10 @@ app.get('/api/fcns', async (req, res) => {
     });
 
     // Write back to DB if any persistent trigger status changed
-    const anyChanges = fcns.some(f => f.isKoTriggered === true && !f.isKoTriggered); // check if there was any actual modification
-    // Since we set dbModified, let's write if it is true
-    const hasModifications = fcns.some(f => f.isKoTriggered || f.isKnockedIn);
-    // To be perfectly safe, write back the array if dbModified was true
-    await writeFCNDb(fcns);
+    if (anyDbModified) {
+      await writeFCNDb(fcns);
+      console.log('[DB Auto-Commit] Saved updated persistent KI/KO triggers to JSON database.');
+    }
 
     res.json(enriched);
   } catch (error) {
