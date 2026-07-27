@@ -67,7 +67,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 3000) {
 
 // In-memory stock price cache to avoid Yahoo Finance rate limits
 const priceCache = new Map();
-const CACHE_DURATION_MS = 3 * 60 * 1000; // 3 minutes cache
+const CACHE_DURATION_MS = 10 * 60 * 1000; // 10 minutes cache
 
 // Fallback helper to fetch price from Nasdaq API (works in datacenter environments)
 async function getStockPriceNasdaq(symbol) {
@@ -143,61 +143,77 @@ async function getStockPrice(symbol) {
     return cached.data;
   }
 
-  try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(normalizedSymbol)}?interval=1d&range=1d`;
-    const response = await fetchWithTimeout(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
-    }, 3000);
+  // Stagger requests to avoid concurrent burst rate limits on cloud IP
+  await new Promise(resolve => setTimeout(resolve, Math.random() * 600));
 
-    if (!response.ok) {
-      throw new Error(`HTTP error ${response.status}`);
-    }
+  const hosts = [
+    'query1.finance.yahoo.com',
+    'query2.finance.yahoo.com'
+  ];
 
-    const data = await response.json();
-    const result = data?.chart?.result?.[0];
-    
-    if (!result) {
-      throw new Error('Stock not found or invalid format');
-    }
+  let lastError = null;
 
-    const price = result.meta.regularMarketPrice;
-    const prevClose = result.meta.chartPreviousClose;
-    const name = result.meta.longName || result.meta.shortName || normalizedSymbol;
-    const currency = result.meta.currency || 'USD';
-
-    const stockInfo = {
-      price,
-      prevClose,
-      name,
-      currency,
-      updatedAt: new Date().toISOString()
-    };
-
-    priceCache.set(normalizedSymbol, {
-      timestamp: now,
-      data: stockInfo
-    });
-
-    return stockInfo;
-  } catch (error) {
-    console.warn(`Yahoo Finance fetch failed for ${symbol}, trying Nasdaq API fallback:`, error.message);
-    
+  for (const host of hosts) {
     try {
-      const stockInfo = await getStockPriceNasdaq(symbol);
+      const url = `https://${host}/v8/finance/chart/${encodeURIComponent(normalizedSymbol)}?interval=1d&range=1d`;
+      const response = await fetchWithTimeout(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+        }
+      }, 2500);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status} from ${host}`);
+      }
+
+      const data = await response.json();
+      const result = data?.chart?.result?.[0];
+      
+      if (!result) {
+        throw new Error(`Invalid data format from ${host}`);
+      }
+
+      const price = result.meta.regularMarketPrice;
+      const prevClose = result.meta.chartPreviousClose;
+      const name = result.meta.longName || result.meta.shortName || normalizedSymbol;
+      const currency = result.meta.currency || 'USD';
+
+      const stockInfo = {
+        price,
+        prevClose,
+        name,
+        currency,
+        updatedAt: new Date().toISOString()
+      };
+
       priceCache.set(normalizedSymbol, {
         timestamp: now,
         data: stockInfo
       });
+
       return stockInfo;
-    } catch (nasdaqError) {
-      console.error(`Nasdaq fallback also failed for ${symbol}:`, nasdaqError.message);
-      if (cached) {
-        return cached.data; // Fallback to stale cache if both fail
-      }
-      throw nasdaqError;
+    } catch (error) {
+      console.warn(`Yahoo Finance query on ${host} failed for ${symbol}:`, error.message);
+      lastError = error;
     }
+  }
+
+  // Fallback to Nasdaq API if both Yahoo Finance hosts fail
+  console.warn(`All Yahoo Finance hosts failed for ${symbol}. Trying Nasdaq API fallback...`);
+  try {
+    const stockInfo = await getStockPriceNasdaq(normalizedSymbol);
+    priceCache.set(normalizedSymbol, {
+      timestamp: now,
+      data: stockInfo
+    });
+    return stockInfo;
+  } catch (nasdaqError) {
+    console.error(`Nasdaq fallback also failed for ${symbol}:`, nasdaqError.message);
+    if (cached) {
+      console.log(`Using stale cache for ${symbol} as fallback.`);
+      return cached.data;
+    }
+    throw new Error(`Failed to fetch stock price for ${symbol}: ${lastError?.message || nasdaqError.message}`);
   }
 }
 
