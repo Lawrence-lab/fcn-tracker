@@ -332,6 +332,29 @@ app.get('/api/exchange-rate', async (req, res) => {
   }
 });
 
+// Diagnostic route to test Spark API live on cloud
+app.get('/api/test-spark', async (req, res) => {
+  const symbols = ['MSTR', 'OKLO', 'SOXX', 'AVGO'];
+  const symbolList = symbols.join(',');
+  const url = `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${encodeURIComponent(symbolList)}&range=1d&interval=5m`;
+  try {
+    const response = await fetchWithTimeout(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+      }
+    }, 4000);
+    const text = await response.text();
+    res.json({
+      status: response.status,
+      statusText: response.statusText,
+      url: url,
+      body: text.substring(0, 1000)
+    });
+  } catch (err) {
+    res.json({ error: err.message });
+  }
+});
+
 // 1. Get all FCNs with dynamic stock prices
 app.get('/api/fcns', async (req, res) => {
   try {
