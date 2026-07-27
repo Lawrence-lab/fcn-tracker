@@ -346,7 +346,8 @@ app.get('/api/fcns', async (req, res) => {
           currentPercent,
           distanceToKo,
           distanceToKi,
-          distanceToStrike
+          distanceToStrike,
+          error: market.error || null
         };
       });
 
