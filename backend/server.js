@@ -50,6 +50,21 @@ app.use((req, res, next) => {
   next();
 });
 
+// Helper for fetch with timeout (prevents slow APIs from locking the server)
+async function fetchWithTimeout(url, options = {}, timeoutMs = 3000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    return response;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 // In-memory stock price cache to avoid Yahoo Finance rate limits
 const priceCache = new Map();
 const CACHE_DURATION_MS = 3 * 60 * 1000; // 3 minutes cache
@@ -59,13 +74,13 @@ async function getStockPriceNasdaq(symbol) {
   const normalizedSymbol = symbol.trim().toUpperCase();
   try {
     const url = `https://api.nasdaq.com/api/quote/${encodeURIComponent(normalizedSymbol)}/info?assetclass=stocks`;
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/json, text/plain, */*',
         'Accept-Language': 'en-US,en;q=0.9'
       }
-    });
+    }, 3000);
 
     if (!response.ok) {
       throw new Error(`Nasdaq HTTP error ${response.status}`);
@@ -130,11 +145,11 @@ async function getStockPrice(symbol) {
 
   try {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(normalizedSymbol)}?interval=1d&range=1d`;
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       }
-    });
+    }, 3000);
 
     if (!response.ok) {
       throw new Error(`HTTP error ${response.status}`);
@@ -232,7 +247,7 @@ app.get('/api/exchange-rate', async (req, res) => {
     return res.json(exchangeRateCache);
   }
   try {
-    const response = await fetch('https://open.er-api.com/v6/latest/USD');
+    const response = await fetchWithTimeout('https://open.er-api.com/v6/latest/USD', {}, 3000);
     if (response.ok) {
       const data = await response.json();
       if (data?.rates?.TWD) {
