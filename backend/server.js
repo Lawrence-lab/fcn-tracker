@@ -193,10 +193,21 @@ async function readFCNDb() {
     return JSON.parse(raw);
   } catch (error) {
     if (error.code === 'ENOENT') {
-      // Create directories and write empty array if file missing
+      // Ensure parent directory exists
       await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
-      await fs.writeFile(DATA_FILE, '[]', 'utf-8');
-      return [];
+      
+      // Attempt to copy template database from project repository to the persistent path
+      const templatePath = path.join(__dirname, 'data', 'fcns.json');
+      try {
+        const templateRaw = await fs.readFile(templatePath, 'utf-8');
+        await fs.writeFile(DATA_FILE, templateRaw, 'utf-8');
+        console.log(`[Database Init] Copied template database to persistent path: ${DATA_FILE}`);
+        return JSON.parse(templateRaw);
+      } catch (templateErr) {
+        // Fallback to empty array if template also missing
+        await fs.writeFile(DATA_FILE, '[]', 'utf-8');
+        return [];
+      }
     }
     throw error;
   }
