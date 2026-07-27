@@ -217,6 +217,58 @@ async function getStockPrice(symbol) {
   }
 }
 
+// Bulk fetch stock prices from Yahoo Finance Spark API (fast, handles multiple symbols, rate-limit proof)
+async function fetchBulkStockPrices(symbolsArray) {
+  if (symbolsArray.length === 0) return {};
+  
+  const symbolList = symbolsArray.join(',');
+  const url = `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${encodeURIComponent(symbolList)}&range=1d&interval=5m`;
+  
+  try {
+    const response = await fetchWithTimeout(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+      }
+    }, 4000);
+    
+    if (!response.ok) {
+      throw new Error(`Spark API returned status ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const results = data?.spark?.result || [];
+    const priceMap = {};
+    
+    results.forEach(item => {
+      if (!item.symbol) return;
+      const symbol = item.symbol.toUpperCase();
+      const resObj = item.response?.[0];
+      const meta = resObj?.meta;
+      const closeArray = resObj?.indicators?.quote?.[0]?.close || [];
+      
+      if (meta) {
+        const price = meta.regularMarketPrice || closeArray[closeArray.length - 1] || null;
+        const prevClose = meta.chartPreviousClose || null;
+        const name = meta.longName || meta.shortName || symbol;
+        const currency = meta.currency || 'USD';
+        
+        priceMap[symbol] = {
+          price,
+          prevClose,
+          name,
+          currency,
+          updatedAt: new Date().toISOString()
+        };
+      }
+    });
+    
+    return priceMap;
+  } catch (error) {
+    console.error('Failed to fetch bulk stock prices via Spark API:', error.message);
+    throw error;
+  }
+}
+
 // Helpers for file DB
 async function readFCNDb() {
   try {
@@ -295,20 +347,58 @@ app.get('/api/fcns', async (req, res) => {
       }
     });
 
-    // Fetch prices sequentially with a small delay to prevent Yahoo Finance rate limits
+    // Fetch prices using bulk Spark API with robust fallback checks
+    const now = Date.now();
+    const symbolsToFetch = [];
     const priceMap = {};
-    const symbolArray = Array.from(symbols);
-    for (let i = 0; i < symbolArray.length; i++) {
-      const symbol = symbolArray[i];
-      // Add a 500ms delay between requests to avoid triggering rate limiting on burst queries
-      if (i > 0) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Check what is in the cache first
+    Array.from(symbols).forEach(symbol => {
+      const cached = priceCache.get(symbol);
+      if (cached && (now - cached.timestamp < CACHE_DURATION_MS)) {
+        priceMap[symbol] = cached.data;
+      } else {
+        symbolsToFetch.push(symbol);
       }
+    });
+
+    // If there are symbols to fetch, load them in bulk using Spark API
+    if (symbolsToFetch.length > 0) {
       try {
-        const info = await getStockPrice(symbol);
-        priceMap[symbol] = info;
-      } catch (error) {
-        priceMap[symbol] = { price: null, prevClose: null, error: error.message };
+        console.log(`[Price Engine] Fetching ${symbolsToFetch.length} stock prices in bulk: ${symbolsToFetch.join(', ')}`);
+        const bulkResults = await fetchBulkStockPrices(symbolsToFetch);
+        
+        // Populate cache and priceMap for successfully fetched symbols
+        symbolsToFetch.forEach(symbol => {
+          if (bulkResults[symbol]) {
+            const stockInfo = bulkResults[symbol];
+            priceCache.set(symbol, {
+              timestamp: now,
+              data: stockInfo
+            });
+            priceMap[symbol] = stockInfo;
+          }
+        });
+      } catch (bulkError) {
+        console.error('[Price Engine] Bulk fetch failed, falling back to individual fetching:', bulkError.message);
+      }
+      
+      // Fallback for any symbols that were NOT successfully populated (staggered sequential fetch)
+      for (let i = 0; i < symbolsToFetch.length; i++) {
+        const symbol = symbolsToFetch[i];
+        if (!priceMap[symbol]) {
+          // If fallback sequence is needed, add spacing
+          if (i > 0) {
+            await new Promise(resolve => setTimeout(resolve, 300));
+          }
+          try {
+            console.log(`[Price Engine] Running individual fallback fetch for ${symbol}...`);
+            const info = await getStockPrice(symbol);
+            priceMap[symbol] = info;
+          } catch (error) {
+            priceMap[symbol] = { price: null, prevClose: null, error: error.message };
+          }
+        }
       }
     }
 
