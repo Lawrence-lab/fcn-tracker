@@ -40,7 +40,7 @@ export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh, o
   const renderStockGauge = (stock, isWorst) => {
     const { symbol, name, initialPrice, currentPrice, koPercent, kiPercent, strikePercent, currentPercent } = stock;
 
-    if (currentPercent === null || currentPrice === null) {
+    if (currentPercent == null || currentPrice == null) {
       return (
         <div key={symbol} className="stock-detail-item">
           <div className="stock-detail-header">
