@@ -61,34 +61,35 @@ export default function FCNForm({ editingFcn, onSubmit, onCancel }) {
       const base64Data = await base64Promise;
       const mimeType = file.type;
 
+      const currentYear = new Date().getFullYear();
       const promptText = `
 You are a professional structured financial product assistant. Analyze this FCN contract image and extract the terms into a structured JSON format.
 
 Output JSON structure:
 {
-  "name": "FCN 2026SN3984" (or similar contract code/name),
+  "name": "FCN ${currentYear}SN3984" (or similar contract code/name),
   "bank": "e.g. DBS, Standard Chartered, Fubon, Cathay, etc. If bank name is not visible, guess DBS or leave blank",
   "currency": "USD" or "TWD",
   "principal": number (e.g. 50000),
   "annualCouponRate": number (e.g. 24.00),
   "couponFrequency": "Monthly" or "Quarterly",
   "observationFrequency": "Monthly" or "Quarterly",
-  "tradeDate": "YYYY-MM-DD" (E.g. if July 7th is Trade Date and current year is 2026, parse as 2026-07-07),
-  "startDate": "YYYY-MM-DD" (E.g. July 16th -> 2026-07-16),
-  maturityDate: "YYYY-MM-DD" (E.g. 最終評價日 1月14日 -> 2027-01-14),
-  lockInMonths: number (E.g. closed period / lock-in period in months. If 4-month closed period, parse as 4. If not specified or standard 1-month, parse as 1),
-  couponPaymentDates: ["YYYY-MM-DD", "YYYY-MM-DD", ...], (Extract the exact list of payment dates / 配息日 if shown in the image. E.g. August 19th -> 2026-08-19, September 17th -> 2026-09-17...),
-  stocks: [
+  "tradeDate": "YYYY-MM-DD" (E.g. if July 7th is Trade Date and current year is ${currentYear}, parse as ${currentYear}-07-07),
+  "startDate": "YYYY-MM-DD" (E.g. July 16th -> ${currentYear}-07-16),
+  "maturityDate": "YYYY-MM-DD" (E.g. if final valuation date is March 1st and it crosses into next year, parse as ${currentYear + 1}-03-01),
+  "lockInMonths": number (E.g. closed period / lock-in period in months. If 4-month closed period, parse as 4. If not specified or standard 1-month, parse as 1),
+  "couponPaymentDates": ["YYYY-MM-DD", "YYYY-MM-DD", ...], (Calculate the years for payment dates relative to tradeDate. E.g. September 2nd -> ${currentYear}-09-02, October 2nd -> ${currentYear}-10-02, ..., January 5th -> ${currentYear + 1}-01-05, February 3rd -> ${currentYear + 1}-02-03, March 3rd -> ${currentYear + 1}-03-03),
+  "stocks": [
     {
-      symbol: "TSM",
-      name: "台積電 ADR",
-      initialPrice: 432.57,
-      koPercent: 100.0,
-      kiPercent: 0.0,
-      strikePercent: 58.05
+      "symbol": "TSM",
+      "name": "台積電 ADR",
+      "initialPrice": 432.57,
+      "koPercent": 100.0,
+      "kiPercent": 0.0,
+      "strikePercent": 58.05
     }
   ],
-  note: "brief notes about the contract"
+  "note": "brief notes about the contract"
 }
 
 Important Rules for stock calculations:
