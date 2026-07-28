@@ -418,18 +418,14 @@ app.get('/api/exchange-rate', async (req, res) => {
 
 // Diagnostic route to test Yahoo Finance subdomains on cloud
 app.get('/api/test-spark', async (req, res) => {
-  try {
-    const info = await getStockPriceGoogle('TSM');
-    res.json({
-      success: true,
-      info
-    });
-  } catch (err) {
-    res.json({
-      success: false,
-      error: err.message
-    });
-  }
+  const cacheEntries = {};
+  priceCache.forEach((val, key) => {
+    cacheEntries[key] = val;
+  });
+  res.json({
+    isFetchingPrices,
+    cache: cacheEntries
+  });
 });
 
 // 1. Get all FCNs with dynamic stock prices
