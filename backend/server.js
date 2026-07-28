@@ -470,7 +470,12 @@ app.get('/api/fcns', async (req, res) => {
       (async () => {
         try {
           console.log(`[Background Fetch] Revalidating ${symbolsToFetch.length} stock prices in bulk: ${symbolsToFetch.join(', ')}`);
-          const bulkResults = await fetchBulkStockPrices(symbolsToFetch);
+          let bulkResults = {};
+          try {
+            bulkResults = await fetchBulkStockPrices(symbolsToFetch);
+          } catch (bulkError) {
+            console.warn('[Background Fetch] Bulk revalidation failed (will use fallback):', bulkError.message);
+          }
           
           // Populate cache for successfully fetched symbols
           symbolsToFetch.forEach(symbol => {
@@ -506,8 +511,8 @@ app.get('/api/fcns', async (req, res) => {
               }
             }
           }
-        } catch (bulkError) {
-          console.error('[Background Fetch] Bulk revalidation failed:', bulkError.message);
+        } catch (fatalError) {
+          console.error('[Background Fetch] Fatal error in background loop:', fatalError.message);
         } finally {
           isFetchingPrices = false;
         }
