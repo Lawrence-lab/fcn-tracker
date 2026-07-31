@@ -179,27 +179,38 @@ async function fetchGoogleFinance(querySymbol) {
   }
 
   const html = await response.text();
-  const regex = /\[\[\[\[null,\["([A-Z0-9\.]+)","([A-Z0-9\.]+)"\]\],null,([\d\.]+),(?:"[^"]*"|null),([\d\.]+)/;
-  const match = html.match(regex);
+  const match = html.match(/AF_initDataCallback\s*\(\s*\{\s*key\s*:\s*'(ds:9|ds:16)'[\s\S]*?data\s*:\s*([\s\S]*?)\s*,\s*sideChannel/);
 
   if (!match) {
-    throw new Error('Regex match failed on Google Finance page');
+    throw new Error('JSON state match failed on Google Finance page');
   }
 
-  const price = parseFloat(match[3]);
-  const prevClose = parseFloat(match[4]);
-  
-  if (isNaN(price)) {
-    throw new Error('Parsed price is NaN');
-  }
+  try {
+    const data = JSON.parse(match[2]);
+    const stockData = data?.[0]?.[0];
+    if (!stockData) {
+      throw new Error('Stock data array structure is missing in JSON state');
+    }
 
-  return {
-    price,
-    prevClose,
-    name: querySymbol.split(':')[0],
-    currency: 'USD',
-    updatedAt: new Date().toISOString()
-  };
+    const price = parseFloat(stockData[6]);
+    const prevClose = parseFloat(stockData[15]);
+    const name = stockData[14] || querySymbol.split(':')[0];
+    const currency = stockData[12] || 'USD';
+
+    if (isNaN(price)) {
+      throw new Error('Parsed price is NaN');
+    }
+
+    return {
+      price,
+      prevClose: isNaN(prevClose) ? null : prevClose,
+      name,
+      currency,
+      updatedAt: new Date().toISOString()
+    };
+  } catch (err) {
+    throw new Error(`JSON parsing failed: ${err.message}`);
+  }
 }
 
 // Helper to fetch price from Yahoo Finance
