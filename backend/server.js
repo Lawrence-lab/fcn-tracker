@@ -179,25 +179,51 @@ async function fetchGoogleFinance(querySymbol) {
   }
 
   const html = await response.text();
-  const match = html.match(/AF_initDataCallback\s*\(\s*\{\s*key\s*:\s*'(ds:9|ds:16)'[\s\S]*?data\s*:\s*([\s\S]*?)\s*,\s*sideChannel/);
+  const match = html.match(/AF_initDataCallback\s*\(\s*\{\s*key\s*:\s*'(ds:16|ds:9)'[\s\S]*?data\s*:\s*([\s\S]*?)\s*,\s*sideChannel/);
 
   if (!match) {
     throw new Error('JSON state match failed on Google Finance page');
   }
 
   try {
+    const key = match[1];
     const data = JSON.parse(match[2]);
-    const stockData = data?.[0]?.[0];
+    let stockData = data?.[0]?.[0];
     if (!stockData) {
       throw new Error('Stock data array structure is missing in JSON state');
     }
 
-    const price = parseFloat(stockData[6]);
-    const prevClose = parseFloat(stockData[15]);
-    const name = stockData[14] || querySymbol.split(':')[0];
-    const currency = stockData[12] || 'USD';
+    // If key is ds:16, unwrap the nested array if present
+    if (key === 'ds:16' && Array.isArray(stockData[0])) {
+      stockData = stockData[0];
+    }
 
-    if (isNaN(price)) {
+    let price = null;
+    let prevClose = null;
+    let name = null;
+    let currency = 'USD';
+
+    if (key === 'ds:16') {
+      const priceObj = stockData[5];
+      price = Array.isArray(priceObj) ? parseFloat(priceObj[0]) : null;
+      prevClose = parseFloat(stockData[7]);
+      name = stockData[2];
+      currency = stockData[4] || 'USD';
+    } else {
+      // Fallback to ds:9 indexes (legacy)
+      price = parseFloat(stockData[6]);
+      prevClose = parseFloat(stockData[15]);
+      name = stockData[14];
+      currency = stockData[12] || 'USD';
+    }
+
+    if (name && typeof name === 'string') {
+      name = name.trim();
+    } else {
+      name = querySymbol.split(':')[0];
+    }
+
+    if (price === null || isNaN(price)) {
       throw new Error('Parsed price is NaN');
     }
 
