@@ -5,6 +5,7 @@ import FCNList from './components/FCNList';
 import FCNForm from './components/FCNForm';
 import HistoryLog from './components/HistoryLog';
 import InterestCalendar from './components/InterestCalendar';
+import DeliveredStocks from './components/DeliveredStocks';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -289,6 +290,10 @@ export default function App() {
 
           {activeTab === 'interest' && (
             <InterestCalendar fcns={fcns} />
+          )}
+
+          {activeTab === 'delivered' && (
+            <DeliveredStocks />
           )}
 
           {activeTab === 'history' && (

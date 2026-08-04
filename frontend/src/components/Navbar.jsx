@@ -33,6 +33,12 @@ export default function Navbar({ activeTab, setActiveTab }) {
           新增 FCN
         </button>
         <button 
+          className={`nav-item ${activeTab === 'delivered' ? 'active' : ''}`}
+          onClick={() => setActiveTab('delivered')}
+        >
+          接股持倉管理
+        </button>
+        <button 
           className={`nav-item ${activeTab === 'history' ? 'active' : ''}`}
           onClick={() => setActiveTab('history')}
         >

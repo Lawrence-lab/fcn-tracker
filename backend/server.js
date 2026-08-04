@@ -953,6 +953,194 @@ app.post('/api/fcns/test-line', async (req, res) => {
   }
 });
 
+// --- Delivered Stocks API Endpoints ---
+const DELIVERED_DB_PATH = path.join(__dirname, '../data/delivered_stocks.json');
+
+async function readDeliveredDb() {
+  try {
+    if (!fs.existsSync(DELIVERED_DB_PATH)) {
+      return [];
+    }
+    const data = await fs.promises.readFile(DELIVERED_DB_PATH, 'utf-8');
+    return JSON.parse(data);
+  } catch (error) {
+    console.error('Error reading delivered stocks db:', error);
+    return [];
+  }
+}
+
+async function writeDeliveredDb(data) {
+  try {
+    await fs.promises.writeFile(DELIVERED_DB_PATH, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (error) {
+    console.error('Error writing delivered stocks db:', error);
+  }
+}
+
+app.get('/api/delivered-stocks', async (req, res) => {
+  try {
+    const list = await readDeliveredDb();
+    const enrichedList = [];
+    
+    for (let item of list) {
+      let currentPrice = null;
+      let prevClose = null;
+      let error = null;
+      
+      try {
+        const market = await getStockPrice(item.stockSymbol);
+        currentPrice = market.price;
+        prevClose = market.prevClose;
+      } catch (err) {
+        error = err.message;
+      }
+      
+      const shares = Number(item.deliveredShares) || 0;
+      const strike = Number(item.strikePrice) || 0;
+      const totalCost = shares * strike;
+      
+      let currentValue = null;
+      let unrealizedPnL = null;
+      let unrealizedPnLPct = null;
+      
+      if (currentPrice !== null) {
+        currentValue = shares * currentPrice;
+        unrealizedPnL = currentValue - totalCost;
+        if (totalCost > 0) {
+          unrealizedPnLPct = (currentPrice - strike) / strike * 100;
+        }
+      }
+      
+      enrichedList.push({
+        ...item,
+        currentPrice,
+        prevClose,
+        currentValue,
+        totalCost,
+        unrealizedPnL,
+        unrealizedPnLPct,
+        error
+      });
+    }
+    
+    res.json(enrichedList);
+  } catch (error) {
+    console.error('GET delivered stocks error:', error);
+    res.status(500).json({ error: 'Failed to retrieve delivered stocks' });
+  }
+});
+
+app.post('/api/delivered-stocks', async (req, res) => {
+  try {
+    const list = await readDeliveredDb();
+    const newItem = {
+      id: `ds-${Date.now()}`,
+      fcnCode: req.body.fcnCode || '',
+      isin: req.body.isin || '',
+      productType: req.body.productType || 'FCN',
+      issuer: req.body.issuer || '',
+      currency: req.body.currency || 'USD',
+      annualCouponRate: req.body.annualCouponRate !== undefined ? Number(req.body.annualCouponRate) : null,
+      accruedDays: req.body.accruedDays !== undefined ? Number(req.body.accruedDays) : null,
+      totalDays: req.body.totalDays !== undefined ? Number(req.body.totalDays) : null,
+      couponPerUnit: req.body.couponPerUnit !== undefined ? Number(req.body.couponPerUnit) : null,
+      finalValuationDate: req.body.finalValuationDate || '',
+      maturityDate: req.body.maturityDate || '',
+      stockName: req.body.stockName || '',
+      stockSymbol: (req.body.stockSymbol || '').trim().toUpperCase(),
+      stockCurrency: req.body.stockCurrency || 'USD',
+      valuationClosePrice: req.body.valuationClosePrice !== undefined ? Number(req.body.valuationClosePrice) : null,
+      strikePrice: req.body.strikePrice !== undefined ? Number(req.body.strikePrice) : 0,
+      exchangeRate: req.body.exchangeRate !== undefined ? Number(req.body.exchangeRate) : 1,
+      deliveredShares: req.body.deliveredShares !== undefined ? Number(req.body.deliveredShares) : 0,
+      fractionalShares: req.body.fractionalShares !== undefined ? Number(req.body.fractionalShares) : null,
+      fractionalCash: req.body.fractionalCash !== undefined ? Number(req.body.fractionalCash) : null,
+      note: req.body.note || '',
+      createdAt: new Date().toISOString()
+    };
+
+    if (!newItem.stockSymbol) {
+      return res.status(400).json({ error: 'Stock symbol is required' });
+    }
+
+    list.push(newItem);
+    await writeDeliveredDb(list);
+    
+    // Warm up price cache for this stock asynchronously
+    getStockPrice(newItem.stockSymbol).catch(() => {});
+
+    res.status(201).json(newItem);
+  } catch (error) {
+    console.error('POST delivered stock error:', error);
+    res.status(500).json({ error: 'Failed to save delivered stock record' });
+  }
+});
+
+app.put('/api/delivered-stocks/:id', async (req, res) => {
+  try {
+    const list = await readDeliveredDb();
+    const index = list.findIndex(item => item.id === req.params.id);
+    if (index === -1) {
+      return res.status(404).json({ error: 'Record not found' });
+    }
+
+    const item = list[index];
+    const updatedItem = {
+      ...item,
+      fcnCode: req.body.fcnCode !== undefined ? req.body.fcnCode : item.fcnCode,
+      isin: req.body.isin !== undefined ? req.body.isin : item.isin,
+      productType: req.body.productType !== undefined ? req.body.productType : item.productType,
+      issuer: req.body.issuer !== undefined ? req.body.issuer : item.issuer,
+      currency: req.body.currency !== undefined ? req.body.currency : item.currency,
+      annualCouponRate: req.body.annualCouponRate !== undefined ? Number(req.body.annualCouponRate) : item.annualCouponRate,
+      accruedDays: req.body.accruedDays !== undefined ? Number(req.body.accruedDays) : item.accruedDays,
+      totalDays: req.body.totalDays !== undefined ? Number(req.body.totalDays) : item.totalDays,
+      couponPerUnit: req.body.couponPerUnit !== undefined ? Number(req.body.couponPerUnit) : item.couponPerUnit,
+      finalValuationDate: req.body.finalValuationDate !== undefined ? req.body.finalValuationDate : item.finalValuationDate,
+      maturityDate: req.body.maturityDate !== undefined ? req.body.maturityDate : item.maturityDate,
+      stockName: req.body.stockName !== undefined ? req.body.stockName : item.stockName,
+      stockSymbol: req.body.stockSymbol !== undefined ? (req.body.stockSymbol || '').trim().toUpperCase() : item.stockSymbol,
+      stockCurrency: req.body.stockCurrency !== undefined ? req.body.stockCurrency : item.stockCurrency,
+      valuationClosePrice: req.body.valuationClosePrice !== undefined ? Number(req.body.valuationClosePrice) : item.valuationClosePrice,
+      strikePrice: req.body.strikePrice !== undefined ? Number(req.body.strikePrice) : item.strikePrice,
+      exchangeRate: req.body.exchangeRate !== undefined ? Number(req.body.exchangeRate) : item.exchangeRate,
+      deliveredShares: req.body.deliveredShares !== undefined ? Number(req.body.deliveredShares) : item.deliveredShares,
+      fractionalShares: req.body.fractionalShares !== undefined ? Number(req.body.fractionalShares) : item.fractionalShares,
+      fractionalCash: req.body.fractionalCash !== undefined ? Number(req.body.fractionalCash) : item.fractionalCash,
+      note: req.body.note !== undefined ? req.body.note : item.note,
+      updatedAt: new Date().toISOString()
+    };
+
+    list[index] = updatedItem;
+    await writeDeliveredDb(list);
+    
+    // Warm up price cache for this stock asynchronously
+    getStockPrice(updatedItem.stockSymbol).catch(() => {});
+
+    res.json(updatedItem);
+  } catch (error) {
+    console.error('PUT delivered stock error:', error);
+    res.status(500).json({ error: 'Failed to update delivered stock record' });
+  }
+});
+
+app.delete('/api/delivered-stocks/:id', async (req, res) => {
+  try {
+    const list = await readDeliveredDb();
+    const index = list.findIndex(item => item.id === req.params.id);
+    if (index === -1) {
+      return res.status(404).json({ error: 'Record not found' });
+    }
+
+    list.splice(index, 1);
+    await writeDeliveredDb(list);
+    res.json({ message: 'Record deleted successfully' });
+  } catch (error) {
+    console.error('DELETE delivered stock error:', error);
+    res.status(500).json({ error: 'Failed to delete delivered stock record' });
+  }
+});
+
 // Schedule daily FCN trigger checks at 5:30 AM (Asia/Taipei time, Tuesday through Saturday only)
 cron.schedule('30 5 * * 2-6', async () => {
   try {
