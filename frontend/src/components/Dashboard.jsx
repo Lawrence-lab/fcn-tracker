@@ -35,8 +35,12 @@ export default function Dashboard({ fcns }) {
     averageCoupon = sumCoupons / activeFcns.length;
   }
 
-  // Count special states
-  const kiCount = activeFcns.filter(f => f.isKnockedIn).length;
+  // Count FCNs that are permanently knocked-in, or currently have a stock breaching the KI barrier
+  const kiCount = activeFcns.filter(fcn => {
+    if (fcn.isKnockedIn) return true;
+    if (!fcn.stocks) return false;
+    return fcn.stocks.some(s => s.currentPercent !== null && s.kiPercent > 0 && s.currentPercent <= s.kiPercent);
+  }).length;
   const koTriggeredFcns = activeFcns.filter(f => f.isKoTriggered);
   
   // Identify high risk items
