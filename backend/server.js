@@ -954,16 +954,27 @@ app.post('/api/fcns/test-line', async (req, res) => {
 });
 
 // --- Delivered Stocks API Endpoints ---
-const DELIVERED_DB_PATH = path.join(__dirname, '../data/delivered_stocks.json');
+const DELIVERED_DB_PATH = process.env.DATA_PATH 
+  ? path.join(process.env.DATA_PATH, 'delivered_stocks.json') 
+  : path.join(__dirname, 'data', 'delivered_stocks.json');
 
 async function readDeliveredDb() {
   try {
-    if (!fs.existsSync(DELIVERED_DB_PATH)) {
-      return [];
-    }
-    const data = await fs.promises.readFile(DELIVERED_DB_PATH, 'utf-8');
-    return JSON.parse(data);
+    const raw = await fs.readFile(DELIVERED_DB_PATH, 'utf-8');
+    return JSON.parse(raw);
   } catch (error) {
+    if (error.code === 'ENOENT') {
+      await fs.mkdir(path.dirname(DELIVERED_DB_PATH), { recursive: true });
+      const templatePath = path.join(__dirname, 'data', 'delivered_stocks.json');
+      try {
+        const templateRaw = await fs.readFile(templatePath, 'utf-8');
+        await fs.writeFile(DELIVERED_DB_PATH, templateRaw, 'utf-8');
+        return JSON.parse(templateRaw);
+      } catch (err) {
+        await fs.writeFile(DELIVERED_DB_PATH, '[]', 'utf-8');
+        return [];
+      }
+    }
     console.error('Error reading delivered stocks db:', error);
     return [];
   }
@@ -971,7 +982,8 @@ async function readDeliveredDb() {
 
 async function writeDeliveredDb(data) {
   try {
-    await fs.promises.writeFile(DELIVERED_DB_PATH, JSON.stringify(data, null, 2), 'utf-8');
+    await fs.mkdir(path.dirname(DELIVERED_DB_PATH), { recursive: true });
+    await fs.writeFile(DELIVERED_DB_PATH, JSON.stringify(data, null, 2), 'utf-8');
   } catch (error) {
     console.error('Error writing delivered stocks db:', error);
   }
