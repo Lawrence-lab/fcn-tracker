@@ -42,6 +42,13 @@ export default function HistoryLog({ fcns, onDelete }) {
   });
 
   const renderStocksTable = (stocks, worstStockSymbol) => {
+    if (!stocks || !Array.isArray(stocks)) return null;
+
+    const formatPrice = (val, dec = 4) => {
+      if (val === null || val === undefined || typeof val !== 'number') return '--';
+      return val.toFixed(dec);
+    };
+
     return (
       <div className="stocks-table-wrapper" style={{ marginTop: '1rem' }}>
         <table className="stocks-table" style={{ fontSize: '0.85rem' }}>
@@ -61,9 +68,9 @@ export default function HistoryLog({ fcns, onDelete }) {
               const { symbol, name, initialPrice, currentPrice, koPercent, kiPercent, strikePercent, currentPercent } = stock;
               const isWorst = symbol === worstStockSymbol;
 
-              const kiPrice = initialPrice * (kiPercent / 100);
-              const strikePrice = initialPrice * (strikePercent / 100);
-              const koPrice = initialPrice * (koPercent / 100);
+              const kiPrice = (typeof initialPrice === 'number' && typeof kiPercent === 'number') ? (initialPrice * (kiPercent / 100)) : null;
+              const strikePrice = (typeof initialPrice === 'number' && typeof strikePercent === 'number') ? (initialPrice * (strikePercent / 100)) : null;
+              const koPrice = (typeof initialPrice === 'number' && typeof koPercent === 'number') ? (initialPrice * (koPercent / 100)) : null;
 
               return (
                 <tr key={symbol} className={isWorst ? 'worst-row' : ''}>
@@ -74,17 +81,24 @@ export default function HistoryLog({ fcns, onDelete }) {
                     <span className="stock-name-label">{name}</span>
                     {isWorst && <span className="stock-worst-badge" style={{ marginLeft: '0.5rem' }}>Worst</span>}
                   </td>
-                  <td>{initialPrice.toFixed(4)}</td>
-                  <td>{koPrice.toFixed(4)} <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>({koPercent}%)</span></td>
+                  <td>{formatPrice(initialPrice, 4)}</td>
                   <td>
-                    {kiPercent === 0 ? '0.0000' : kiPrice.toFixed(4)} <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>({kiPercent}%)</span>
+                    {koPrice !== null ? formatPrice(koPrice, 4) : '--'}
+                    {typeof koPercent === 'number' && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}> ({koPercent}%)</span>}
                   </td>
-                  <td>{strikePrice.toFixed(4)} <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>({strikePercent}%)</span></td>
+                  <td>
+                    {kiPrice !== null ? (kiPercent === 0 ? '0.0000' : formatPrice(kiPrice, 4)) : '--'}
+                    {typeof kiPercent === 'number' && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}> ({kiPercent}%)</span>}
+                  </td>
+                  <td>
+                    {strikePrice !== null ? formatPrice(strikePrice, 4) : '--'}
+                    {typeof strikePercent === 'number' && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}> ({strikePercent}%)</span>}
+                  </td>
                   <td style={{ color: currentPrice >= initialPrice ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 600 }}>
-                    {currentPrice !== null ? currentPrice.toFixed(4) : '--'}
+                    {formatPrice(currentPrice, 4)}
                   </td>
                   <td style={{ textAlign: 'right', color: currentPercent >= 100 ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 600 }}>
-                    {currentPercent !== null ? `${currentPercent.toFixed(2)}%` : '--'}
+                    {typeof currentPercent === 'number' ? `${currentPercent.toFixed(2)}%` : '--'}
                   </td>
                 </tr>
               );
@@ -293,7 +307,7 @@ export default function HistoryLog({ fcns, onDelete }) {
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                   <span style={{ color: 'var(--text-secondary)' }}>接股標的與股數：</span>
                                   <span style={{ fontWeight: 600 }}>
-                                    {settle.stockSymbol} ({settle.sharesReceived?.toFixed(4)} 股)
+                                    {settle.stockSymbol} ({typeof settle.sharesReceived === 'number' ? settle.sharesReceived.toFixed(4) : '--'} 股)
                                   </span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
