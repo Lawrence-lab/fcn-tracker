@@ -32,6 +32,7 @@ export default function DeliveredStocks() {
   const [deliveredShares, setDeliveredShares] = useState('');
   const [fractionalShares, setFractionalShares] = useState('');
   const [fractionalCash, setFractionalCash] = useState('');
+  const [totalInterestReceived, setTotalInterestReceived] = useState('');
   const [note, setNote] = useState('');
 
   // Fetch all delivered stock positions
@@ -59,12 +60,11 @@ export default function DeliveredStocks() {
   const totalValue = list.reduce((sum, item) => sum + (item.currentValue || item.totalCost || 0), 0);
   const totalPnL = totalValue - totalCost;
   const totalPnLPct = totalCost > 0 ? (totalPnL / totalCost) * 100 : 0;
-  const totalCouponEarned = list.reduce((sum, item) => {
-    const qty = Number(item.deliveredShares) || 0;
-    const unitCoupon = Number(item.couponPerUnit) || 0;
-    // Estimated coupon earned
-    return sum + (unitCoupon || 0);
-  }, 0);
+  const totalCouponEarned = list.reduce((sum, item) => sum + (item.totalInterestReceived || 0), 0);
+  
+  // Calculate net overall P&L (PnL + Coupon)
+  const totalNetOverallPnL = totalPnL + totalCouponEarned;
+  const totalNetOverallPnLPct = totalCost > 0 ? (totalNetOverallPnL / totalCost) * 100 : 0;
 
   // Form Submission
   const handleSubmit = async (e) => {
@@ -95,6 +95,7 @@ export default function DeliveredStocks() {
       deliveredShares: Number(deliveredShares),
       fractionalShares: fractionalShares ? Number(fractionalShares) : null,
       fractionalCash: fractionalCash ? Number(fractionalCash) : null,
+      totalInterestReceived: totalInterestReceived ? Number(totalInterestReceived) : 0,
       note
     };
 
@@ -152,6 +153,7 @@ export default function DeliveredStocks() {
     setDeliveredShares(String(item.deliveredShares || ''));
     setFractionalShares(item.fractionalShares !== null ? String(item.fractionalShares) : '');
     setFractionalCash(item.fractionalCash !== null ? String(item.fractionalCash) : '');
+    setTotalInterestReceived(item.totalInterestReceived !== undefined ? String(item.totalInterestReceived) : '');
     setNote(item.note || '');
     setAdminPassword('');
     setIsModalOpen(true);
@@ -203,6 +205,7 @@ export default function DeliveredStocks() {
     setDeliveredShares('');
     setFractionalShares('');
     setFractionalCash('');
+    setTotalInterestReceived('');
     setNote('');
     setAdminPassword('');
   };
@@ -271,12 +274,21 @@ export default function DeliveredStocks() {
           </div>
         </div>
         <div className="glass-card stat-card">
-          <div className="stat-label">累計領取票息收入 (USD)</div>
+          <div className="stat-label">累計已收利息總和 (USD)</div>
           <div className="stat-value" style={{ color: 'var(--color-gold)' }}>
             {formatCurrency(totalCouponEarned, 2)}
           </div>
           <div className="stat-subtext" style={{ color: 'var(--text-secondary)' }}>
-            源自已到期合約配息紀錄
+            到期前已實現利息收益
+          </div>
+        </div>
+        <div className="glass-card stat-card">
+          <div className="stat-label">加計利息後總損益 (USD)</div>
+          <div className={`stat-value ${totalNetOverallPnL >= 0 ? 'text-success' : 'text-danger'}`}>
+            {totalNetOverallPnL >= 0 ? '+' : ''}{formatCurrency(totalNetOverallPnL, 2)}
+          </div>
+          <div className={`stat-subtext ${totalNetOverallPnL >= 0 ? 'text-success' : 'text-danger'}`} style={{ fontWeight: 600 }}>
+            {totalNetOverallPnL >= 0 ? '▲' : '▼'} {totalNetOverallPnLPct.toFixed(2)}%
           </div>
         </div>
       </div>
@@ -334,7 +346,7 @@ export default function DeliveredStocks() {
                   style={{ 
                     padding: '1.2rem', 
                     display: 'grid', 
-                    gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1fr auto', 
+                    gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1.2fr 1.2fr auto', 
                     alignItems: 'center', 
                     cursor: 'pointer',
                     gap: '1rem'
@@ -386,15 +398,31 @@ export default function DeliveredStocks() {
                     </div>
                   </div>
 
-                  {/* Unrealized PnL */}
+                  {/* Unrealized PnL & Coupon */}
                   <div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>未實現損益</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>帳面損益 / 已收利息</div>
                     <div style={{ 
-                      fontSize: '1rem', 
+                       fontSize: '0.95rem', 
                       fontWeight: 700, 
                       color: item.unrealizedPnL >= 0 ? 'var(--color-success)' : 'var(--color-danger)' 
                     }}>
                       {item.unrealizedPnL >= 0 ? '+' : ''}{formatCurrency(item.unrealizedPnL, 2)}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--color-gold)', fontWeight: 600 }}>
+                      利息: +{formatCurrency(item.totalInterestReceived || 0, 2)}
+                    </div>
+                  </div>
+
+                  {/* Net PnL after Coupon */}
+                  <div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>加計利息後淨損益</div>
+                    <div style={{ 
+                      fontSize: '1rem', 
+                      fontWeight: 800, 
+                      color: (item.netPnL !== null ? item.netPnL : (item.unrealizedPnL + (item.totalInterestReceived || 0))) >= 0 ? 'var(--color-success)' : 'var(--color-danger)' 
+                    }}>
+                      {(item.netPnL !== null ? item.netPnL : (item.unrealizedPnL + (item.totalInterestReceived || 0))) >= 0 ? '+' : ''}
+                      {formatCurrency(item.netPnL !== null ? item.netPnL : (item.unrealizedPnL + (item.totalInterestReceived || 0)), 2)}
                     </div>
                   </div>
 
@@ -438,7 +466,8 @@ export default function DeliveredStocks() {
                             ['配息率(年率)', item.annualCouponRate !== null ? `${item.annualCouponRate}%` : '--'],
                             ['當期符合計息天數', item.accruedDays !== null ? `${item.accruedDays} 天` : '--'],
                             ['當期總天數', item.totalDays !== null ? `${item.totalDays} 天` : '--'],
-                            ['每單位配息金額', `$${formatCurrency(item.couponPerUnit, 2)}`, 'var(--color-success)'],
+                            ['每單位配息金額 (當期)', `$${formatCurrency(item.couponPerUnit, 2)}`, 'var(--color-success)'],
+                            ['FCN 期間已收利息總和', `$${formatCurrency(item.totalInterestReceived || 0, 2)}`, 'var(--color-gold)', true],
                             ['最終評價日', item.finalValuationDate || '--'],
                             ['到期日', item.maturityDate || '--'],
                             ['是否轉換股票', '是', 'var(--color-danger)', true],
@@ -456,7 +485,7 @@ export default function DeliveredStocks() {
                               key={idx} 
                               style={{ 
                                 display: 'flex', 
-                                borderBottom: idx === 21 ? 'none' : '1px solid var(--border-color)',
+                                borderBottom: idx === 22 ? 'none' : '1px solid var(--border-color)',
                                 fontSize: '0.85rem'
                               }}
                             >
@@ -621,6 +650,16 @@ export default function DeliveredStocks() {
                       type="date" 
                       value={maturityDate} 
                       onChange={e => setMaturityDate(e.target.value)} 
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>FCN 期間已收利息總和 (USD)</label>
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      placeholder="例如: 14580.00"
+                      value={totalInterestReceived} 
+                      onChange={e => setTotalInterestReceived(e.target.value)} 
                     />
                   </div>
                 </div>

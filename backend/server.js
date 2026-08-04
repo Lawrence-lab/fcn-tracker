@@ -1010,14 +1010,17 @@ app.get('/api/delivered-stocks', async (req, res) => {
       const shares = Number(item.deliveredShares) || 0;
       const strike = Number(item.strikePrice) || 0;
       const totalCost = shares * strike;
+      const totalInterest = Number(item.totalInterestReceived) || 0;
       
       let currentValue = null;
       let unrealizedPnL = null;
       let unrealizedPnLPct = null;
+      let netPnL = null;
       
       if (currentPrice !== null) {
         currentValue = shares * currentPrice;
         unrealizedPnL = currentValue - totalCost;
+        netPnL = unrealizedPnL + totalInterest;
         if (totalCost > 0) {
           unrealizedPnLPct = (currentPrice - strike) / strike * 100;
         }
@@ -1031,6 +1034,7 @@ app.get('/api/delivered-stocks', async (req, res) => {
         totalCost,
         unrealizedPnL,
         unrealizedPnLPct,
+        netPnL,
         error
       });
     }
@@ -1067,6 +1071,7 @@ app.post('/api/delivered-stocks', async (req, res) => {
       deliveredShares: req.body.deliveredShares !== undefined ? Number(req.body.deliveredShares) : 0,
       fractionalShares: req.body.fractionalShares !== undefined ? Number(req.body.fractionalShares) : null,
       fractionalCash: req.body.fractionalCash !== undefined ? Number(req.body.fractionalCash) : null,
+      totalInterestReceived: req.body.totalInterestReceived !== undefined ? Number(req.body.totalInterestReceived) : 0,
       note: req.body.note || '',
       createdAt: new Date().toISOString()
     };
@@ -1119,6 +1124,7 @@ app.put('/api/delivered-stocks/:id', async (req, res) => {
       deliveredShares: req.body.deliveredShares !== undefined ? Number(req.body.deliveredShares) : item.deliveredShares,
       fractionalShares: req.body.fractionalShares !== undefined ? Number(req.body.fractionalShares) : item.fractionalShares,
       fractionalCash: req.body.fractionalCash !== undefined ? Number(req.body.fractionalCash) : item.fractionalCash,
+      totalInterestReceived: req.body.totalInterestReceived !== undefined ? Number(req.body.totalInterestReceived) : item.totalInterestReceived,
       note: req.body.note !== undefined ? req.body.note : item.note,
       updatedAt: new Date().toISOString()
     };
