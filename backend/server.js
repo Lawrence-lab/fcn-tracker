@@ -533,6 +533,9 @@ app.get('/api/fcns', async (req, res) => {
     // Enrich FCN data with current calculations
     let anyDbModified = false;
     const enriched = fcns.map(fcn => {
+      if (fcn.status !== 'Active') {
+        return fcn;
+      }
       if (!fcn.stocks) return fcn;
 
       const enrichedStocks = fcn.stocks.map(stock => {
