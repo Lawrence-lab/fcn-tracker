@@ -179,7 +179,10 @@ async function fetchGoogleFinance(querySymbol) {
   }
 
   const html = await response.text();
-  const match = html.match(/AF_initDataCallback\s*\(\s*\{\s*key\s*:\s*'(ds:16|ds:9)'[\s\S]*?data\s*:\s*([\s\S]*?)\s*,\s*sideChannel/);
+  let match = html.match(/AF_initDataCallback\s*\(\s*\{\s*key\s*:\s*'(ds:16)'[\s\S]*?data\s*:\s*([\s\S]*?)\s*,\s*sideChannel/);
+  if (!match) {
+    match = html.match(/AF_initDataCallback\s*\(\s*\{\s*key\s*:\s*'(ds:9)'[\s\S]*?data\s*:\s*([\s\S]*?)\s*,\s*sideChannel/);
+  }
 
   if (!match) {
     throw new Error('JSON state match failed on Google Finance page');
