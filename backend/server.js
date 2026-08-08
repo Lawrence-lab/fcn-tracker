@@ -179,67 +179,76 @@ async function fetchGoogleFinance(querySymbol) {
   }
 
   const html = await response.text();
-  let match = html.match(/AF_initDataCallback\s*\(\s*\{\s*key\s*:\s*'(ds:16)'[\s\S]*?data\s*:\s*([\s\S]*?)\s*,\s*sideChannel/);
-  if (!match) {
-    match = html.match(/AF_initDataCallback\s*\(\s*\{\s*key\s*:\s*'(ds:9)'[\s\S]*?data\s*:\s*([\s\S]*?)\s*,\s*sideChannel/);
-  }
+  const tickerOnly = querySymbol.split(':')[0].trim().toUpperCase();
 
-  if (!match) {
-    throw new Error('JSON state match failed on Google Finance page');
-  }
+  // Find all initDataCallbacks
+  const regex = /AF_initDataCallback\s*\(\s*\{\s*key\s*:\s*'(ds:16|ds:9)'[\s\S]*?data\s*:\s*([\s\S]*?)\s*,\s*sideChannel/g;
+  let match;
+  let parsedInfo = null;
 
-  try {
+  while ((match = regex.exec(html)) !== null) {
     const key = match[1];
-    const data = JSON.parse(match[2]);
-    let stockData = data?.[0]?.[0];
-    if (!stockData) {
-      throw new Error('Stock data array structure is missing in JSON state');
+    const dataStr = match[2];
+    try {
+      const data = JSON.parse(dataStr);
+      let stockData = data?.[0]?.[0];
+      if (!stockData) continue;
+
+      if (key === 'ds:16') {
+        let unwrapped = stockData;
+        if (Array.isArray(unwrapped[0])) {
+          unwrapped = unwrapped[0];
+        }
+
+        const symbolArray = unwrapped[1];
+        if (Array.isArray(symbolArray) && symbolArray[0] && symbolArray[0].trim().toUpperCase() === tickerOnly) {
+          const priceObj = unwrapped[5];
+          const price = Array.isArray(priceObj) ? parseFloat(priceObj[0]) : null;
+          const prevClose = parseFloat(unwrapped[7]);
+          const name = unwrapped[2] || tickerOnly;
+          const currency = unwrapped[4] || 'USD';
+
+          if (price !== null && !isNaN(price)) {
+            parsedInfo = {
+              price,
+              prevClose: isNaN(prevClose) ? null : prevClose,
+              name: name.trim(),
+              currency,
+              updatedAt: new Date().toISOString()
+            };
+            break;
+          }
+        }
+      } else if (key === 'ds:9') {
+        const symbolArray = stockData[1];
+        if (Array.isArray(symbolArray) && symbolArray[0] && symbolArray[0].trim().toUpperCase() === tickerOnly) {
+          const price = parseFloat(stockData[6]);
+          const prevClose = parseFloat(stockData[15]);
+          const name = stockData[14] || tickerOnly;
+          const currency = stockData[12] || 'USD';
+
+          if (!isNaN(price)) {
+            parsedInfo = {
+              price,
+              prevClose: isNaN(prevClose) ? null : prevClose,
+              name: name.trim(),
+              currency,
+              updatedAt: new Date().toISOString()
+            };
+            break;
+          }
+        }
+      }
+    } catch (err) {
+      // ignore parse errors and proceed to the next block
     }
-
-    // If key is ds:16, unwrap the nested array if present
-    if (key === 'ds:16' && Array.isArray(stockData[0])) {
-      stockData = stockData[0];
-    }
-
-    let price = null;
-    let prevClose = null;
-    let name = null;
-    let currency = 'USD';
-
-    if (key === 'ds:16') {
-      const priceObj = stockData[5];
-      price = Array.isArray(priceObj) ? parseFloat(priceObj[0]) : null;
-      prevClose = parseFloat(stockData[7]);
-      name = stockData[2];
-      currency = stockData[4] || 'USD';
-    } else {
-      // Fallback to ds:9 indexes (legacy)
-      price = parseFloat(stockData[6]);
-      prevClose = parseFloat(stockData[15]);
-      name = stockData[14];
-      currency = stockData[12] || 'USD';
-    }
-
-    if (name && typeof name === 'string') {
-      name = name.trim();
-    } else {
-      name = querySymbol.split(':')[0];
-    }
-
-    if (price === null || isNaN(price)) {
-      throw new Error('Parsed price is NaN');
-    }
-
-    return {
-      price,
-      prevClose: isNaN(prevClose) ? null : prevClose,
-      name,
-      currency,
-      updatedAt: new Date().toISOString()
-    };
-  } catch (err) {
-    throw new Error(`JSON parsing failed: ${err.message}`);
   }
+
+  if (parsedInfo) {
+    return parsedInfo;
+  }
+
+  throw new Error(`Google Finance price not found or validation failed for ${querySymbol}`);
 }
 
 // Helper to fetch price from Yahoo Finance
