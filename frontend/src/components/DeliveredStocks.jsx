@@ -5,6 +5,19 @@ export default function DeliveredStocks() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState(null);
+  const [usdToTwd, setUsdToTwd] = useState(32.2);
+
+  // Fetch exchange rate on mount
+  useEffect(() => {
+    fetch('/api/exchange-rate')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.USDTWD) {
+          setUsdToTwd(data.USDTWD);
+        }
+      })
+      .catch(err => console.error('Failed to fetch exchange rate:', err));
+  }, []);
   
   // Form Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -259,35 +272,47 @@ export default function DeliveredStocks() {
       <div className="stats-grid" style={{ marginBottom: '2rem' }}>
         <div className="glass-card stat-card">
           <div className="stat-label">當前持股總市值 (USD)</div>
-          <div className="stat-value">{formatCurrency(totalValue, 2)}</div>
-          <div className="stat-subtext" style={{ color: 'var(--text-secondary)' }}>
-            取得成本計：${formatCurrency(totalCost, 2)}
+          <div className="stat-value">${formatCurrency(totalValue, 2)}</div>
+          <div className="stat-value-twd" style={{ fontSize: '0.85rem', color: '#c084fc', marginTop: '0.1rem', fontWeight: 600 }}>
+            折合台幣: NT$ {formatCurrency(totalValue * usdToTwd, 0)}
+          </div>
+          <div className="stat-subtext" style={{ color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
+            取得成本計：${formatCurrency(totalCost, 2)} (折合 NT$ {formatCurrency(totalCost * usdToTwd, 0)})
           </div>
         </div>
         <div className="glass-card stat-card">
           <div className="stat-label">未實現帳面損益 (USD)</div>
           <div className={`stat-value ${totalPnL >= 0 ? 'text-success' : 'text-danger'}`}>
-            {totalPnL >= 0 ? '+' : ''}{formatCurrency(totalPnL, 2)}
+            {totalPnL >= 0 ? '+' : ''}${formatCurrency(totalPnL, 2)}
           </div>
-          <div className={`stat-subtext ${totalPnL >= 0 ? 'text-success' : 'text-danger'}`} style={{ fontWeight: 600 }}>
+          <div className={`stat-value-twd ${totalPnL >= 0 ? 'text-success' : 'text-danger'}`} style={{ fontSize: '0.85rem', marginTop: '0.1rem', fontWeight: 600 }}>
+            折合台幣: {totalPnL >= 0 ? '+' : ''}NT$ {formatCurrency(totalPnL * usdToTwd, 0)}
+          </div>
+          <div className={`stat-subtext ${totalPnL >= 0 ? 'text-success' : 'text-danger'}`} style={{ fontWeight: 600, marginTop: '0.4rem' }}>
             {totalPnL >= 0 ? '▲' : '▼'} {totalPnLPct.toFixed(2)}%
           </div>
         </div>
         <div className="glass-card stat-card">
           <div className="stat-label">累計已收利息總和 (USD)</div>
           <div className="stat-value" style={{ color: 'var(--color-gold)' }}>
-            {formatCurrency(totalCouponEarned, 2)}
+            ${formatCurrency(totalCouponEarned, 2)}
           </div>
-          <div className="stat-subtext" style={{ color: 'var(--text-secondary)' }}>
+          <div className="stat-value-twd" style={{ fontSize: '0.85rem', color: 'var(--color-gold)', marginTop: '0.1rem', fontWeight: 600 }}>
+            折合台幣: NT$ {formatCurrency(totalCouponEarned * usdToTwd, 0)}
+          </div>
+          <div className="stat-subtext" style={{ color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
             到期前已實現利息收益
           </div>
         </div>
         <div className="glass-card stat-card">
           <div className="stat-label">加計利息後總損益 (USD)</div>
           <div className={`stat-value ${totalNetOverallPnL >= 0 ? 'text-success' : 'text-danger'}`}>
-            {totalNetOverallPnL >= 0 ? '+' : ''}{formatCurrency(totalNetOverallPnL, 2)}
+            {totalNetOverallPnL >= 0 ? '+' : ''}${formatCurrency(totalNetOverallPnL, 2)}
           </div>
-          <div className={`stat-subtext ${totalNetOverallPnL >= 0 ? 'text-success' : 'text-danger'}`} style={{ fontWeight: 600 }}>
+          <div className={`stat-value-twd ${totalNetOverallPnL >= 0 ? 'text-success' : 'text-danger'}`} style={{ fontSize: '0.85rem', marginTop: '0.1rem', fontWeight: 600 }}>
+            折合台幣: {totalNetOverallPnL >= 0 ? '+' : ''}NT$ {formatCurrency(totalNetOverallPnL * usdToTwd, 0)}
+          </div>
+          <div className={`stat-subtext ${totalNetOverallPnL >= 0 ? 'text-success' : 'text-danger'}`} style={{ fontWeight: 600, marginTop: '0.4rem' }}>
             {totalNetOverallPnL >= 0 ? '▲' : '▼'} {totalNetOverallPnLPct.toFixed(2)}%
           </div>
         </div>
@@ -393,7 +418,10 @@ export default function DeliveredStocks() {
                     <div style={{ fontSize: '1rem', fontWeight: 600 }}>
                       ${formatCurrency(item.currentValue || item.totalCost, 2)}
                     </div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#c084fc', fontWeight: 500 }}>
+                      NT$ {formatCurrency((item.currentValue || item.totalCost) * usdToTwd, 0)}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                       成本: ${formatCurrency(item.totalCost, 2)}
                     </div>
                   </div>
@@ -408,7 +436,14 @@ export default function DeliveredStocks() {
                     }}>
                       {item.unrealizedPnL >= 0 ? '+' : ''}{formatCurrency(item.unrealizedPnL, 2)}
                     </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--color-gold)', fontWeight: 600 }}>
+                    <div style={{ 
+                      fontSize: '0.78rem', 
+                      fontWeight: 600, 
+                      color: item.unrealizedPnL >= 0 ? 'var(--color-success)' : 'var(--color-danger)' 
+                    }}>
+                      NT$ {item.unrealizedPnL >= 0 ? '+' : ''}{formatCurrency(item.unrealizedPnL * usdToTwd, 0)}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--color-gold)', fontWeight: 600, marginTop: '0.2rem' }}>
                       利息: +{formatCurrency(item.totalInterestReceived || 0, 2)}
                     </div>
                   </div>
@@ -423,6 +458,14 @@ export default function DeliveredStocks() {
                     }}>
                       {(item.netPnL !== null ? item.netPnL : (item.unrealizedPnL + (item.totalInterestReceived || 0))) >= 0 ? '+' : ''}
                       {formatCurrency(item.netPnL !== null ? item.netPnL : (item.unrealizedPnL + (item.totalInterestReceived || 0)), 2)}
+                    </div>
+                    <div style={{ 
+                      fontSize: '0.82rem', 
+                      fontWeight: 700, 
+                      color: (item.netPnL !== null ? item.netPnL : (item.unrealizedPnL + (item.totalInterestReceived || 0))) >= 0 ? 'var(--color-success)' : 'var(--color-danger)' 
+                    }}>
+                      NT$ {(item.netPnL !== null ? item.netPnL : (item.unrealizedPnL + (item.totalInterestReceived || 0))) >= 0 ? '+' : ''}
+                      {formatCurrency((item.netPnL !== null ? item.netPnL : (item.unrealizedPnL + (item.totalInterestReceived || 0))) * usdToTwd, 0)}
                     </div>
                   </div>
 
@@ -466,20 +509,20 @@ export default function DeliveredStocks() {
                             ['配息率(年率)', item.annualCouponRate !== null ? `${item.annualCouponRate}%` : '--'],
                             ['當期符合計息天數', item.accruedDays !== null ? `${item.accruedDays} 天` : '--'],
                             ['當期總天數', item.totalDays !== null ? `${item.totalDays} 天` : '--'],
-                            ['每單位配息金額 (當期)', `$${formatCurrency(item.couponPerUnit, 2)}`, 'var(--color-success)'],
-                            ['FCN 期間已收利息總和', `$${formatCurrency(item.totalInterestReceived || 0, 2)}`, 'var(--color-gold)', true],
+                            ['每單位配息金額 (當期)', item.couponPerUnit !== null ? `$${formatCurrency(item.couponPerUnit, 2)} (折合 NT$ ${formatCurrency(item.couponPerUnit * usdToTwd, 0)})` : '--', 'var(--color-success)'],
+                            ['FCN 期間已收利息總和', `$${formatCurrency(item.totalInterestReceived || 0, 2)} (折合 NT$ ${formatCurrency((item.totalInterestReceived || 0) * usdToTwd, 0)})`, 'var(--color-gold)', true],
                             ['最終評價日', item.finalValuationDate || '--'],
                             ['到期日', item.maturityDate || '--'],
                             ['是否轉換股票', '是', 'var(--color-danger)', true],
                             ['轉換股票名稱', item.stockName || '--'],
                             ['轉換股票代號', item.stockSymbol || '--'],
                             ['轉換股票幣別', item.stockCurrency || 'USD'],
-                            ['最終評價日收盤價', `$${formatCurrency(item.valuationClosePrice, 2)}`],
-                            ['交收股票執行價 (每股成本)', `$${formatCurrency(item.strikePrice, 4)}`],
+                            ['最終評價日收盤價', item.valuationClosePrice !== null ? `$${formatCurrency(item.valuationClosePrice, 2)} (折合 NT$ ${formatCurrency(item.valuationClosePrice * usdToTwd, 0)})` : '--'],
+                            ['交收股票執行價 (每股成本)', `$${formatCurrency(item.strikePrice, 4)} (折合 NT$ ${formatCurrency(item.strikePrice * usdToTwd, 2)})`],
                             ['匯率', item.exchangeRate || '1'],
                             ['每單位交收股數', `${formatCurrency(item.deliveredShares, 0)} 股`],
                             ['每單位零股', item.fractionalShares !== null ? formatCurrency(item.fractionalShares, 4) : '--'],
-                            ['每單位零股折現(USD)', item.fractionalCash !== null ? `$${formatCurrency(item.fractionalCash, 2)}` : '--', 'var(--color-success)']
+                            ['每單位零股折現(USD)', item.fractionalCash !== null ? `$${formatCurrency(item.fractionalCash, 2)} (折合 NT$ ${formatCurrency(item.fractionalCash * usdToTwd, 0)})` : '--', 'var(--color-success)']
                           ].map(([label, val, color, isBold], idx) => (
                             <div 
                               key={idx} 
