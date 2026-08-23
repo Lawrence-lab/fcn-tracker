@@ -653,20 +653,29 @@ app.get('/api/fcns', async (req, res) => {
         });
       }
 
-      // Check for automatic KO trigger (all active stocks are >= koPercent, and past lock-in period)
+      // Check for automatic KO trigger (only on monthly coupon observation dates, past lock-in period)
       let isKoTriggered = fcn.isKoTriggered || false;
-      if (!isKoTriggered && fcn.status === 'Active' && fcn.startDate && enrichedStocks.length > 0) {
+      if (!isKoTriggered && fcn.status === 'Active' && fcn.startDate && fcn.couponPaymentDates && enrichedStocks.length > 0) {
         const lockInMonths = fcn.lockInMonths !== undefined ? Number(fcn.lockInMonths) : 1;
         const startDate = new Date(fcn.startDate);
         const koStartDate = new Date(startDate.setMonth(startDate.getMonth() + lockInMonths));
         const today = new Date();
+        const todayStr = today.toLocaleDateString('zh-TW', {
+          timeZone: 'Asia/Taipei',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        }).replace(/\//g, '-');
         
         if (today >= koStartDate) {
-          const allStocksAboveKo = enrichedStocks.every(s => s.currentPercent !== null && s.currentPercent >= s.koPercent);
-          if (allStocksAboveKo) {
-            isKoTriggered = true;
-            fcn.isKoTriggered = true;
-            dbModified = true;
+          const isEvaluationDay = fcn.couponPaymentDates.includes(todayStr);
+          if (isEvaluationDay) {
+            const allStocksAboveKo = enrichedStocks.every(s => s.currentPercent !== null && s.currentPercent >= s.koPercent);
+            if (allStocksAboveKo) {
+              isKoTriggered = true;
+              fcn.isKoTriggered = true;
+              dbModified = true;
+            }
           }
         }
       }
@@ -861,13 +870,20 @@ async function evaluateFCNTriggers() {
     
     let modified = false;
     
-    // Check if the FCN has passed the lock-in period
+    // Check if the FCN has passed the lock-in period and today is the observation day
     let hasObservationStarted = true;
+    const today = new Date();
+    const todayStr = today.toLocaleDateString('zh-TW', {
+      timeZone: 'Asia/Taipei',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).replace(/\//g, '-');
+
     if (fcn.startDate) {
       const lockInMonths = fcn.lockInMonths !== undefined ? Number(fcn.lockInMonths) : 1;
       const startDate = new Date(fcn.startDate);
       const koStartDate = new Date(startDate.setMonth(startDate.getMonth() + lockInMonths));
-      const today = new Date();
       if (today < koStartDate) {
         hasObservationStarted = false;
       }
@@ -875,7 +891,9 @@ async function evaluateFCNTriggers() {
       hasObservationStarted = false;
     }
 
-    let allStocksAboveKo = hasObservationStarted;
+    // Only evaluate KO on the monthly observation dates (couponPaymentDates)
+    const isEvaluationDay = fcn.couponPaymentDates && fcn.couponPaymentDates.includes(todayStr);
+    let allStocksAboveKo = hasObservationStarted && isEvaluationDay;
     let worstStock = null;
     
     for (let stock of fcn.stocks) {
@@ -922,7 +940,7 @@ async function evaluateFCNTriggers() {
     if (allStocksAboveKo) {
       console.log(`[Auto-Trigger Alert] FCN "${fcn.name}" has met KO (Knock-out) conditions. All underlying stocks are at or above their KO barriers.`);
       
-      const msg = `🔔 FCN 敲出提醒！\n\n您的商品「${fcn.name}」所有標的皆已高於敲出水位 (${fcn.stocks?.[0]?.koPercent}%)，已滿足每日敲出條件 (KO)！\n\n請登入系統辦理結算平倉：\nhttps://fcn-tracking.zeabur.app/`;
+      const msg = `🔔 FCN 敲出提醒！\n\n您的商品「${fcn.name}」所有標的皆已高於敲出水位 (${fcn.stocks?.[0]?.koPercent}%)，已滿足每月評價敲出條件 (KO)！\n\n請登入系統辦理結算平倉：\nhttps://fcn-tracking.zeabur.app/`;
       await sendLineNotification(msg);
     }
 
