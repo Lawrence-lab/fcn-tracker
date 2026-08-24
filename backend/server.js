@@ -737,6 +737,26 @@ app.post('/api/fcns', async (req, res) => {
     console.error('API Error add FCN:', error);
     res.status(500).json({ error: 'Failed to add FCN record' });
   }
+// 3.5. Download Backup (requires admin password)
+app.get('/api/fcns/backup/download', async (req, res) => {
+  try {
+    const password = req.headers['x-admin-password'] || req.query.password;
+    if (password !== '940929') {
+      return res.status(401).json({ error: '密碼錯誤，拒絕存取' });
+    }
+
+    const fcns = await readFCNDb();
+    const delivered = await readDeliveredDb();
+
+    res.json({
+      backupDate: new Date().toISOString(),
+      fcns,
+      delivered
+    });
+  } catch (error) {
+    console.error('Backup API Error:', error);
+    res.status(500).json({ error: '產出備份檔案失敗' });
+  }
 });
 
 // 3. Update FCN

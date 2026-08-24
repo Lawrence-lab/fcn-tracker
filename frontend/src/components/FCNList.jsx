@@ -17,6 +17,40 @@ export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh, o
     setTimeout(() => setRefreshing(false), 800);
   };
 
+  const handleExportBackup = async () => {
+    const password = prompt('請輸入後台管理密碼進行資料備份匯出：');
+    if (!password) return;
+    
+    try {
+      const res = await fetch(`/api/fcns/backup/download`, {
+        headers: {
+          'X-Admin-Password': password
+        }
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(`備份失敗: ${err.error || '密碼錯誤'}`);
+        return;
+      }
+      const data = await res.json();
+      
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const dateStr = new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '');
+      a.href = url;
+      a.download = `fcn_portfolio_backup_${dateStr}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      alert('資料備份匯出成功！請妥善保存下載的 JSON 檔案。');
+    } catch (error) {
+      console.error('Failed to export backup:', error);
+      alert('連線失敗或備份出錯');
+    }
+  };
+
   const toggleExpand = (id) => {
     setExpandedId(expandedId === id ? null : id);
   };
@@ -264,6 +298,16 @@ export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh, o
             <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
           </svg>
           {refreshing ? '更新股價中...' : '同步最新股價'}
+        </button>
+        <button 
+          className="refresh-button" 
+          onClick={handleExportBackup} 
+          style={{ background: 'rgba(168, 85, 247, 0.1)', border: '1px solid rgba(168, 85, 247, 0.3)', color: '#c084fc' }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+          </svg>
+          備份匯出
         </button>
       </div>
 
