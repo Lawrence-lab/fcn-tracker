@@ -750,6 +750,15 @@ app.get('/api/fcns/backup/download', async (req, res) => {
     const fcns = await readFCNDb();
     const delivered = await readDeliveredDb();
 
+    const dateStr = new Date().toLocaleDateString('zh-TW', {
+      timeZone: 'Asia/Taipei',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).replace(/\//g, '');
+    
+    res.setHeader('Content-Disposition', `attachment; filename=fcn_portfolio_backup_${dateStr}.json`);
+    res.setHeader('Content-Type', 'application/json');
     res.json({
       backupDate: new Date().toISOString(),
       fcns,

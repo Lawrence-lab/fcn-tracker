@@ -22,29 +22,16 @@ export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh, o
     if (!password) return;
     
     try {
-      const res = await fetch(`/api/fcns/backup/download`, {
-        headers: {
-          'X-Admin-Password': password
-        }
-      });
+      // Validate password first with a quick fetch
+      const res = await fetch(`/api/fcns/backup/download?password=${encodeURIComponent(password)}`);
       if (!res.ok) {
         const err = await res.json();
         alert(`備份失敗: ${err.error || '密碼錯誤'}`);
         return;
       }
-      const data = await res.json();
       
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      const dateStr = new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '');
-      a.href = url;
-      a.download = `fcn_portfolio_backup_${dateStr}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      alert('資料備份匯出成功！請妥善保存下載的 JSON 檔案。');
+      // If password is correct, trigger native browser download using window.location.href
+      window.location.href = `/api/fcns/backup/download?password=${encodeURIComponent(password)}`;
     } catch (error) {
       console.error('Failed to export backup:', error);
       alert('連線失敗或備份出錯');
