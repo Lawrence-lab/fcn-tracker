@@ -737,6 +737,8 @@ app.post('/api/fcns', async (req, res) => {
     console.error('API Error add FCN:', error);
     res.status(500).json({ error: 'Failed to add FCN record' });
   }
+});
+
 // 3.5. Download Backup (requires admin password)
 app.get('/api/fcns/backup/download', async (req, res) => {
   try {
