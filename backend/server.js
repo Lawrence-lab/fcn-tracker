@@ -768,6 +768,8 @@ app.get('/api/fcns/backup/download', async (req, res) => {
     console.error('Backup API Error:', error);
     res.status(500).json({ error: '產出備份檔案失敗' });
   }
+});
+
 // 3.6. Restore Backup (requires admin password)
 app.post('/api/fcns/backup/restore', async (req, res) => {
   try {
