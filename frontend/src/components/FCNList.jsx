@@ -5,6 +5,13 @@ export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh, o
   const [search, setSearch] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
+  // Backup / Restore Modal States
+  const [backupModalType, setBackupModalType] = useState(null); // 'export' | 'import' | null
+  const [backupPassword, setBackupPassword] = useState('');
+  const [backupFile, setBackupFile] = useState(null);
+  const [backupError, setBackupError] = useState('');
+  const [backupSubmitting, setBackupSubmitting] = useState(false);
+
   const activeFcns = fcns.filter(
     item => item.status === 'Active' && 
     (item.name.toLowerCase().includes(search.toLowerCase()) || 
@@ -17,24 +24,82 @@ export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh, o
     setTimeout(() => setRefreshing(false), 800);
   };
 
-  const handleExportBackup = async () => {
-    const password = prompt('請輸入後台管理密碼進行資料備份匯出：');
-    if (!password) return;
+  const handleBackupSubmit = async (e) => {
+    e.preventDefault();
+    setBackupError('');
     
-    try {
-      // Validate password first with a quick fetch
-      const res = await fetch(`/api/fcns/backup/download?password=${encodeURIComponent(password)}`);
-      if (!res.ok) {
-        const err = await res.json();
-        alert(`備份失敗: ${err.error || '密碼錯誤'}`);
+    if (!backupPassword) {
+      setBackupError('請輸入管理密碼');
+      return;
+    }
+    
+    setBackupSubmitting(true);
+    
+    if (backupModalType === 'export') {
+      try {
+        const res = await fetch(`/api/fcns/backup/download?password=${encodeURIComponent(backupPassword)}`);
+        if (!res.ok) {
+          const err = await res.json();
+          setBackupError(err.error || '密碼錯誤');
+          setBackupSubmitting(false);
+          return;
+        }
+        
+        window.location.href = `/api/fcns/backup/download?password=${encodeURIComponent(backupPassword)}`;
+        setBackupModalType(null);
+        setBackupPassword('');
+      } catch (error) {
+        console.error('Failed to export backup:', error);
+        setBackupError('連線失敗或備份出錯');
+      } finally {
+        setBackupSubmitting(false);
+      }
+    } else if (backupModalType === 'import') {
+      if (!backupFile) {
+        setBackupError('請選擇要匯入的備份 JSON 檔案');
+        setBackupSubmitting(false);
         return;
       }
       
-      // If password is correct, trigger native browser download using window.location.href
-      window.location.href = `/api/fcns/backup/download?password=${encodeURIComponent(password)}`;
-    } catch (error) {
-      console.error('Failed to export backup:', error);
-      alert('連線失敗或備份出錯');
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const jsonData = JSON.parse(event.target.result);
+          if (!jsonData.fcns || !jsonData.delivered) {
+            setBackupError('無效的備份檔案格式（缺少 fcns 或 delivered 欄位）');
+            setBackupSubmitting(false);
+            return;
+          }
+          
+          const res = await fetch(`/api/fcns/backup/restore`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Admin-Password': backupPassword
+            },
+            body: JSON.stringify(jsonData)
+          });
+          
+          if (!res.ok) {
+            const err = await res.json();
+            setBackupError(err.error || '密碼錯誤或匯入失敗');
+            setBackupSubmitting(false);
+            return;
+          }
+          
+          alert('資料還原成功！網頁即將自動重新整理以套用新資料。');
+          window.location.reload();
+        } catch (error) {
+          console.error('Failed to parse JSON file:', error);
+          setBackupError('解析檔案失敗，請確保上傳的是正確的 JSON 格式檔案');
+          setBackupSubmitting(false);
+        }
+      };
+      reader.onerror = () => {
+        setBackupError('讀取檔案失敗');
+        setBackupSubmitting(false);
+      };
+      reader.readAsText(backupFile);
     }
   };
 
@@ -288,13 +353,32 @@ export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh, o
         </button>
         <button 
           className="refresh-button" 
-          onClick={handleExportBackup} 
+          onClick={() => {
+            setBackupModalType('export');
+            setBackupPassword('');
+            setBackupError('');
+          }} 
           style={{ background: 'rgba(168, 85, 247, 0.1)', border: '1px solid rgba(168, 85, 247, 0.3)', color: '#c084fc' }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
           </svg>
           備份匯出
+        </button>
+        <button 
+          className="refresh-button" 
+          onClick={() => {
+            setBackupModalType('import');
+            setBackupPassword('');
+            setBackupFile(null);
+            setBackupError('');
+          }} 
+          style={{ background: 'rgba(236, 72, 153, 0.1)', border: '1px solid rgba(236, 72, 153, 0.3)', color: '#f472b6' }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+          </svg>
+          備份匯入
         </button>
       </div>
 
@@ -446,6 +530,75 @@ export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh, o
           })}
         </div>
       )}
-    </div>
-  );
+
+      {/* Backup / Restore Password Modal Dialog */}
+    {backupModalType && (
+      <div className="modal-overlay" onClick={() => setBackupModalType(null)}>
+        <div className="modal-content glass-card" style={{ maxWidth: '450px', width: '90%' }} onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3 className="modal-title">
+              {backupModalType === 'export' ? '🔒 匯出資料備份' : '🔓 匯入並還原備份'}
+            </h3>
+            <button className="close-btn" onClick={() => setBackupModalType(null)}>×</button>
+          </div>
+          
+          <form onSubmit={handleBackupSubmit}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', padding: '0.5rem 0' }}>
+              <div className="form-group">
+                <label>後台管理密碼</label>
+                <input 
+                  type="password" 
+                  placeholder="請輸入管理密碼 (以星號遮蔽)" 
+                  value={backupPassword}
+                  onChange={e => setBackupPassword(e.target.value)}
+                  required
+                  style={{
+                    width: '100%',
+                    background: 'rgba(0,0,0,0.3)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '6px',
+                    padding: '0.6rem 0.8rem',
+                    color: 'var(--text-primary)'
+                  }}
+                />
+              </div>
+              
+              {backupModalType === 'import' && (
+                <div className="form-group">
+                  <label>選擇備份 JSON 檔案</label>
+                  <input 
+                    type="file" 
+                    accept=".json"
+                    onChange={e => setBackupFile(e.target.files ? e.target.files[0] : null)}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '0.4rem 0',
+                      color: 'var(--text-secondary)'
+                    }}
+                  />
+                </div>
+              )}
+              
+              {backupError && (
+                <div style={{ color: 'var(--color-danger)', fontSize: '0.88rem', fontWeight: 500 }}>
+                  ⚠️ {backupError}
+                </div>
+              )}
+            </div>
+            
+            <div className="modal-footer" style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+              <button type="button" className="action-btn delete" onClick={() => setBackupModalType(null)}>
+                取消
+              </button>
+              <button type="submit" className="action-btn edit" disabled={backupSubmitting}>
+                {backupSubmitting ? '處理中...' : backupModalType === 'export' ? '開始匯出' : '開始還原'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
+  </div>
+);
 }

@@ -768,6 +768,28 @@ app.get('/api/fcns/backup/download', async (req, res) => {
     console.error('Backup API Error:', error);
     res.status(500).json({ error: '產出備份檔案失敗' });
   }
+// 3.6. Restore Backup (requires admin password)
+app.post('/api/fcns/backup/restore', async (req, res) => {
+  try {
+    const password = req.headers['x-admin-password'] || req.body.password;
+    if (password !== '940929') {
+      return res.status(401).json({ error: '密碼錯誤，拒絕存取' });
+    }
+
+    const { fcns, delivered } = req.body;
+    if (!fcns || !delivered) {
+      return res.status(400).json({ error: '無效的備份檔案格式' });
+    }
+
+    // Write both databases
+    await writeFCNDb(fcns);
+    await writeDeliveredDb(delivered);
+
+    res.json({ message: '資料庫還原成功' });
+  } catch (error) {
+    console.error('Backup Restore Error:', error);
+    res.status(500).json({ error: '還原備份失敗' });
+  }
 });
 
 // 3. Update FCN
