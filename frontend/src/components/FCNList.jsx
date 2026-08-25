@@ -487,11 +487,22 @@ export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh, o
                           <span className="val">{item.couponFrequency === 'Monthly' ? '每月配息' : item.couponFrequency === 'Quarterly' ? '每季配息' : '到期一次配息'}</span>
                         </div>
                         <div className="detail-row" style={{ flexDirection: 'column', gap: '0.25rem', marginTop: '0.25rem' }}>
-                          <span className="label">約定比價日列表</span>
+                          <span className="label">比價日設定</span>
                           <span className="val" style={{ fontSize: '0.8rem', color: item.observationDates && item.observationDates.length > 0 ? 'var(--text-secondary)' : '#a1a1aa', background: 'rgba(0,0,0,0.2)', padding: '0.4rem', borderRadius: '6px', lineHeight: '1.4' }}>
-                            {item.observationDates && item.observationDates.length > 0 
-                              ? item.observationDates.join(', ') 
-                              : '尚未設定 (系統將自動使用「約定配息日」進行比價判定)'}
+                            {(() => {
+                              if (!item.observationDates || item.observationDates.length === 0) {
+                                return '尚未設定 (系統將自動使用「約定配息日」進行比價判定)';
+                              }
+                              const isStepDown = item.name.toLowerCase().includes('stepdown') || 
+                                                 item.name.toLowerCase().includes('step down') || 
+                                                 (item.note && (item.note.toLowerCase().includes('stepdown') || item.note.toLowerCase().includes('step down')));
+                              if (isStepDown) {
+                                return `每月比價 (Step Down)：${item.observationDates.join(', ')}`;
+                              } else {
+                                const sorted = [...item.observationDates].sort((a, b) => new Date(a) - new Date(b));
+                                return `${sorted[0]} 起每日比價`;
+                              }
+                            })()}
                           </span>
                         </div>
                         {item.couponPaymentDates && item.couponPaymentDates.length > 0 && (
