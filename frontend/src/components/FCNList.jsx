@@ -486,6 +486,14 @@ export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh, o
                           <span className="label">配息頻率</span>
                           <span className="val">{item.couponFrequency === 'Monthly' ? '每月配息' : item.couponFrequency === 'Quarterly' ? '每季配息' : '到期一次配息'}</span>
                         </div>
+                        {item.observationDates && item.observationDates.length > 0 && (
+                          <div className="detail-row" style={{ flexDirection: 'column', gap: '0.25rem', marginTop: '0.25rem' }}>
+                            <span className="label">約定比價日列表</span>
+                            <span className="val" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.2)', padding: '0.4rem', borderRadius: '6px', lineHeight: '1.4' }}>
+                              {item.observationDates.join(', ')}
+                            </span>
+                          </div>
+                        )}
                         {item.couponPaymentDates && item.couponPaymentDates.length > 0 && (
                           <div className="detail-row" style={{ flexDirection: 'column', gap: '0.25rem', marginTop: '0.25rem' }}>
                             <span className="label">約定配息日列表</span>

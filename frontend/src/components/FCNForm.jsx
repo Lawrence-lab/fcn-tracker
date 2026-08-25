@@ -28,6 +28,7 @@ export default function FCNForm({ editingFcn, onSubmit, onCancel }) {
 
   // Coupon payment dates state
   const [couponPaymentDatesRaw, setCouponPaymentDatesRaw] = useState('');
+  const [observationDatesRaw, setObservationDatesRaw] = useState('');
 
   // AI Import States
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('gemini_api_key') || '');
@@ -78,6 +79,7 @@ Output JSON structure:
   "startDate": "YYYY-MM-DD" (E.g. July 16th -> ${currentYear}-07-16),
   "maturityDate": "YYYY-MM-DD" (E.g. if final valuation date is March 1st and it crosses into next year, parse as ${currentYear + 1}-03-01),
   "lockInMonths": number (E.g. closed period / lock-in period in months. If 4-month closed period, parse as 4. If not specified or standard 1-month, parse as 1),
+  "observationDates": ["YYYY-MM-DD", "YYYY-MM-DD", ...], (Calculate the years for monthly valuation/observation dates relative to tradeDate. E.g. August 14th -> ${currentYear}-08-14, September 14th -> ${currentYear}-09-14, ...),
   "couponPaymentDates": ["YYYY-MM-DD", "YYYY-MM-DD", ...], (Calculate the years for payment dates relative to tradeDate. E.g. September 2nd -> ${currentYear}-09-02, October 2nd -> ${currentYear}-10-02, ..., January 5th -> ${currentYear + 1}-01-05, February 3rd -> ${currentYear + 1}-02-03, March 3rd -> ${currentYear + 1}-03-03),
   "stocks": [
     {
@@ -159,6 +161,7 @@ Important Rules for stock calculations:
       setLockInMonths(parsed.lockInMonths !== undefined ? parsed.lockInMonths : 1);
       setNote(parsed.note || '');
       setCouponPaymentDatesRaw(parsed.couponPaymentDates ? parsed.couponPaymentDates.join(', ') : '');
+      setObservationDatesRaw(parsed.observationDates ? parsed.observationDates.join(', ') : '');
       
       if (parsed.stocks && parsed.stocks.length > 0) {
         setStocks(parsed.stocks.map(s => ({
@@ -218,6 +221,7 @@ Important Rules for stock calculations:
       setLockInMonths(editingFcn.lockInMonths !== undefined ? editingFcn.lockInMonths : 1);
       setNote(editingFcn.note || '');
       setCouponPaymentDatesRaw(editingFcn.couponPaymentDates ? editingFcn.couponPaymentDates.join(', ') : '');
+      setObservationDatesRaw(editingFcn.observationDates ? editingFcn.observationDates.join(', ') : '');
       if (editingFcn.stocks && editingFcn.stocks.length > 0) {
         // Strip out dynamic properties before editing
         setStocks(editingFcn.stocks.map(s => ({
@@ -246,6 +250,7 @@ Important Rules for stock calculations:
       setLockInMonths(1);
       setNote('');
       setCouponPaymentDatesRaw('');
+      setObservationDatesRaw('');
       setStocks([emptyStock()]);
     }
   }, [editingFcn]);
@@ -300,6 +305,7 @@ Important Rules for stock calculations:
       lockInMonths: Number(lockInMonths) || 1,
       note,
       couponPaymentDates: couponPaymentDatesRaw.split(',').map(d => d.trim()).filter(Boolean),
+      observationDates: observationDatesRaw.split(',').map(d => d.trim()).filter(Boolean),
       stocks: stocks.map(s => ({
         symbol: s.symbol.trim().toUpperCase(),
         name: s.name.trim(),
@@ -502,6 +508,20 @@ Important Rules for stock calculations:
               value={maturityDate} 
               onChange={e => setMaturityDate(e.target.value)} 
             />
+          </div>
+
+          <div className="form-group full-width">
+            <label htmlFor="fcn-observation-dates">約定比價日列表 (用逗號分隔)</label>
+            <input 
+              id="fcn-observation-dates"
+              type="text" 
+              placeholder="例如: 2026-08-14, 2026-09-14, 2026-10-14, 2026-11-14, 2026-12-14, 2027-01-14" 
+              value={observationDatesRaw} 
+              onChange={e => setObservationDatesRaw(e.target.value)} 
+            />
+            <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '-0.25rem' }}>
+              比價日（Valuation/Observation Date）是用來判斷是否提前敲出（KO）的基準日期。
+            </small>
           </div>
 
           <div className="form-group full-width">

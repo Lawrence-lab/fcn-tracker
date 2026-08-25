@@ -655,7 +655,7 @@ app.get('/api/fcns', async (req, res) => {
 
       // Check for automatic KO trigger (only on monthly coupon observation dates, past lock-in period)
       let isKoTriggered = fcn.isKoTriggered || false;
-      if (!isKoTriggered && fcn.status === 'Active' && fcn.startDate && fcn.couponPaymentDates && enrichedStocks.length > 0) {
+      if (!isKoTriggered && fcn.status === 'Active' && fcn.startDate && enrichedStocks.length > 0) {
         const lockInMonths = fcn.lockInMonths !== undefined ? Number(fcn.lockInMonths) : 1;
         const startDate = new Date(fcn.startDate);
         const koStartDate = new Date(startDate.setMonth(startDate.getMonth() + lockInMonths));
@@ -668,7 +668,10 @@ app.get('/api/fcns', async (req, res) => {
         }).replace(/\//g, '-');
         
         if (today >= koStartDate) {
-          const isEvaluationDay = fcn.couponPaymentDates.includes(todayStr);
+          const datesToCheck = (fcn.observationDates && fcn.observationDates.length > 0) 
+            ? fcn.observationDates 
+            : (fcn.couponPaymentDates || []);
+          const isEvaluationDay = datesToCheck.includes(todayStr);
           if (isEvaluationDay) {
             const allStocksAboveKo = enrichedStocks.every(s => s.currentPercent !== null && s.currentPercent >= s.koPercent);
             if (allStocksAboveKo) {
@@ -946,8 +949,11 @@ async function evaluateFCNTriggers() {
       hasObservationStarted = false;
     }
 
-    // Only evaluate KO on the monthly observation dates (couponPaymentDates)
-    const isEvaluationDay = fcn.couponPaymentDates && fcn.couponPaymentDates.includes(todayStr);
+    // Only evaluate KO on the monthly observation dates (observationDates or couponPaymentDates)
+    const datesToCheck = (fcn.observationDates && fcn.observationDates.length > 0) 
+      ? fcn.observationDates 
+      : (fcn.couponPaymentDates || []);
+    const isEvaluationDay = datesToCheck.includes(todayStr);
     let allStocksAboveKo = hasObservationStarted && isEvaluationDay;
     let worstStock = null;
     
