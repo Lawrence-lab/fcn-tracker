@@ -139,6 +139,45 @@ export default function App() {
     setActiveTab('add');
   };
 
+  // Helper to calculate estimated coupons
+  const calculateEstimatedInterest = (fcn, dateStr) => {
+    if (!fcn || !dateStr) return 0;
+    const principal = Number(fcn.principal) || 0;
+    const rate = Number(fcn.annualCouponRate) || 0;
+    const singleCoupon = (principal * (rate / 100)) / 12;
+
+    const dStart = new Date(fcn.startDate);
+    const dSettle = new Date(dateStr);
+    if (dSettle < dStart) return 0;
+
+    let count = 1;
+    if (fcn.couponPaymentDates && fcn.couponPaymentDates.length > 0) {
+      const sorted = [...fcn.couponPaymentDates].sort((a,b) => new Date(a) - new Date(b));
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const dCoupon = new Date(sorted[i]);
+        if (dSettle >= dCoupon) {
+          count++;
+        } else {
+          break;
+        }
+      }
+    } else {
+      const yearDiff = dSettle.getFullYear() - dStart.getFullYear();
+      const monthDiff = dSettle.getMonth() - dStart.getMonth();
+      count = Math.max(1, yearDiff * 12 + monthDiff + 1);
+    }
+    
+    return Math.round(count * singleCoupon * 100) / 100;
+  };
+
+  const handleSettleDateChange = (date) => {
+    setSettleDate(date);
+    if (settlingFcn) {
+      const estInterest = calculateEstimatedInterest(settlingFcn, date);
+      setTotalCoupons(estInterest > 0 ? String(estInterest) : '');
+    }
+  };
+
   // Open Settle Modal
   const handleOpenSettle = (fcn) => {
     setSettlingFcn(fcn);
@@ -152,8 +191,12 @@ export default function App() {
       setSettleType('Matured-Cash');
     }
 
-    setSettleDate(new Date().toISOString().split('T')[0]);
-    setTotalCoupons('');
+    const initialDate = new Date().toISOString().split('T')[0];
+    setSettleDate(initialDate);
+    
+    const estInterest = calculateEstimatedInterest(fcn, initialDate);
+    setTotalCoupons(estInterest > 0 ? String(estInterest) : '');
+
     setSettleNote('');
     setMarketPriceSettle('');
     if (fcn.stocks && fcn.stocks.length > 0) {
@@ -332,7 +375,7 @@ export default function App() {
                 <input 
                   type="date" 
                   value={settleDate} 
-                  onChange={e => setSettleDate(e.target.value)} 
+                  onChange={e => handleSettleDateChange(e.target.value)} 
                   required 
                 />
               </div>
