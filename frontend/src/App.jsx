@@ -22,15 +22,29 @@ export default function App() {
   const [marketPriceSettle, setMarketPriceSettle] = useState('');
   const [settleNote, setSettleNote] = useState('');
 
-  // Helper to prompt for admin password for modifying operations
-  const verifyAdminPassword = () => {
-    const pwd = prompt('🔒 請輸入管理密碼以執行此操作：');
-    if (pwd === null) return null; // User clicked cancel
-    if (pwd !== '940929') {
-      alert('❌ 密碼錯誤，拒絕執行！');
-      return null;
+  // Admin password modal states
+  const [pendingAction, setPendingAction] = useState(null);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
+  const requestAdminPassword = (action) => {
+    setPendingAction(() => action);
+    setShowPasswordModal(true);
+    setAdminPasswordInput('');
+    setPasswordError('');
+  };
+
+  const handlePasswordModalSubmit = (e) => {
+    e.preventDefault();
+    if (adminPasswordInput === '940929') {
+      setShowPasswordModal(false);
+      if (pendingAction) {
+        pendingAction();
+      }
+    } else {
+      setPasswordError('密碼錯誤，拒絕存取！');
     }
-    return pwd;
   };
 
   // Fetch FCNs
@@ -80,57 +94,55 @@ export default function App() {
 
   // Create or Edit FCN submission
   const handleFormSubmit = async (payload) => {
-    const pwd = verifyAdminPassword();
-    if (!pwd) return;
+    requestAdminPassword(async () => {
+      try {
+        const url = editingFcn ? `/api/fcns/${editingFcn.id}` : '/api/fcns';
+        const method = editingFcn ? 'PUT' : 'POST';
 
-    try {
-      const url = editingFcn ? `/api/fcns/${editingFcn.id}` : '/api/fcns';
-      const method = editingFcn ? 'PUT' : 'POST';
+        const response = await fetch(url, {
+          method,
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-Admin-Password': '940929'
+          },
+          body: JSON.stringify(payload)
+        });
 
-      const response = await fetch(url, {
-        method,
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-Admin-Password': pwd
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (response.ok) {
-        setEditingFcn(null);
-        setActiveTab('list');
-        fetchFCNS();
-      } else {
-        const err = await response.json();
-        alert(`儲存失敗: ${err.error || '不明錯誤'}`);
+        if (response.ok) {
+          setEditingFcn(null);
+          setActiveTab('list');
+          fetchFCNS();
+        } else {
+          const err = await response.json();
+          alert(`儲存失敗: ${err.error || '不明錯誤'}`);
+        }
+      } catch (error) {
+        console.error('Error submitting form:', error);
+        alert('網路連線失敗，請檢查後端是否啟動');
       }
-    } catch (error) {
-      console.error('Error submitting form:', error);
-      alert('網路連線失敗，請檢查後端是否啟動');
-    }
+    });
   };
 
   // Delete FCN
   const handleDeleteFcn = async (id) => {
-    const pwd = verifyAdminPassword();
-    if (!pwd) return;
-
-    try {
-      const response = await fetch(`/api/fcns/${id}`, { 
-        method: 'DELETE',
-        headers: {
-          'X-Admin-Password': pwd
+    requestAdminPassword(async () => {
+      try {
+        const response = await fetch(`/api/fcns/${id}`, { 
+          method: 'DELETE',
+          headers: {
+            'X-Admin-Password': '940929'
+          }
+        });
+        if (response.ok) {
+          fetchFCNS();
+        } else {
+          const err = await response.json();
+          alert(`刪除失敗: ${err.error || '不明錯誤'}`);
         }
-      });
-      if (response.ok) {
-        fetchFCNS();
-      } else {
-        const err = await response.json();
-        alert(`刪除失敗: ${err.error || '不明錯誤'}`);
+      } catch (error) {
+        console.error('Error deleting FCN:', error);
       }
-    } catch (error) {
-      console.error('Error deleting FCN:', error);
-    }
+    });
   };
 
   // Open Edit Form
@@ -226,73 +238,76 @@ export default function App() {
     e.preventDefault();
     if (!settlingFcn) return;
 
-    const pwd = verifyAdminPassword();
-    if (!pwd) return;
-
-    const principal = Number(settlingFcn.principal) || 0;
-    const couponsEarned = Number(totalCoupons) || 0;
-
-    let settlementData = {
-      settleDate,
-      totalCouponsEarned: couponsEarned,
-      note: settleNote
-    };
-
+    // Validate stock and price if it is stock settlement BEFORE password prompt
     if (settleType === 'Matured-Stock') {
       const stock = getSelectedStockInfo();
       if (!stock) return alert('請選擇接股標的');
       if (!marketPriceSettle || Number(marketPriceSettle) <= 0) {
         return alert('請輸入結算收盤價');
       }
+    }
 
-      const strikePrice = stock.initialPrice * (stock.strikePercent / 100);
-      const sharesReceived = principal / strikePrice;
-      const marketPrice = Number(marketPriceSettle);
-      
-      // Stock value loss/gain = (Market Price - Strike Price) * Shares
-      const stockValueLoss = (marketPrice - strikePrice) * sharesReceived;
-      const netProfit = stockValueLoss + couponsEarned;
+    requestAdminPassword(async () => {
+      const principal = Number(settlingFcn.principal) || 0;
+      const couponsEarned = Number(totalCoupons) || 0;
 
-      settlementData = {
-        ...settlementData,
-        stockSymbol: stock.symbol,
-        stockName: stock.name,
-        strikePrice,
-        sharesReceived,
-        marketPriceAtSettle: marketPrice,
-        stockValueLoss,
-        netProfit
+      let settlementData = {
+        settleDate,
+        totalCouponsEarned: couponsEarned,
+        note: settleNote
       };
-    } else {
-      // For Cash maturity or Knock-out: Net Profit is just the coupons earned
-      settlementData.netProfit = couponsEarned;
-    }
 
-    try {
-      const response = await fetch(`/api/fcns/${settlingFcn.id}`, {
-        method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          'X-Admin-Password': pwd
-        },
-        body: JSON.stringify({
-          status: settleType,
-          settlement: settlementData
-        })
-      });
+      if (settleType === 'Matured-Stock') {
+        const stock = getSelectedStockInfo();
+        const strikePrice = stock.initialPrice * (stock.strikePercent / 100);
+        const sharesReceived = principal / strikePrice;
+        const marketPrice = Number(marketPriceSettle);
+        
+        // Stock value loss/gain = (Market Price - Strike Price) * Shares
+        const stockValueLoss = (marketPrice - strikePrice) * sharesReceived;
+        const netProfit = stockValueLoss + couponsEarned;
 
-      if (response.ok) {
-        setSettlingFcn(null);
-        setActiveTab('history');
-        fetchFCNS();
+        settlementData = {
+          ...settlementData,
+          stockSymbol: stock.symbol,
+          stockName: stock.name,
+          strikePrice,
+          sharesReceived,
+          marketPriceAtSettle: marketPrice,
+          stockValueLoss,
+          netProfit
+        };
       } else {
-        const err = await response.json();
-        alert(`辦理結算失敗: ${err.error || '不明錯誤'}`);
+        // For Cash maturity or Knock-out: Net Profit is just the coupons earned
+        settlementData.netProfit = couponsEarned;
       }
-    } catch (error) {
-      console.error('Error settling FCN:', error);
-      alert('連線失敗');
-    }
+
+      try {
+        const response = await fetch(`/api/fcns/${settlingFcn.id}`, {
+          method: 'PUT',
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-Admin-Password': '940929'
+          },
+          body: JSON.stringify({
+            status: settleType,
+            settlement: settlementData
+          })
+        });
+
+        if (response.ok) {
+          setSettlingFcn(null);
+          setActiveTab('history');
+          fetchFCNS();
+        } else {
+          const err = await response.json();
+          alert(`辦理結算失敗: ${err.error || '不明錯誤'}`);
+        }
+      } catch (error) {
+        console.error('Error settling FCN:', error);
+        alert('連線失敗');
+      }
+    });
   };
 
   return (
@@ -451,6 +466,57 @@ export default function App() {
                 </button>
                 <button type="submit" className="btn btn-primary" style={{ background: 'var(--color-success)' }}>
                   確定平倉結算
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Password Modal Dialogue */}
+      {showPasswordModal && (
+        <div className="modal-overlay" onClick={() => setShowPasswordModal(false)}>
+          <div className="modal-content glass-card" style={{ maxWidth: '400px', width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">🔒 需要管理權限</h3>
+              <button className="close-btn" onClick={() => setShowPasswordModal(false)}>×</button>
+            </div>
+            
+            <form onSubmit={handlePasswordModalSubmit}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '0.5rem 0' }}>
+                <div className="form-group">
+                  <label>管理者密碼</label>
+                  <input 
+                    type="password" 
+                    placeholder="請輸入管理密碼以確認此操作" 
+                    value={adminPasswordInput}
+                    onChange={e => setAdminPasswordInput(e.target.value)}
+                    required
+                    autoFocus
+                    style={{
+                      width: '100%',
+                      background: 'rgba(0,0,0,0.3)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '6px',
+                      padding: '0.6rem 0.8rem',
+                      color: 'var(--text-primary)'
+                    }}
+                  />
+                </div>
+                
+                {passwordError && (
+                  <div style={{ color: 'var(--color-danger)', fontSize: '0.88rem', fontWeight: 500 }}>
+                    ⚠️ {passwordError}
+                  </div>
+                )}
+              </div>
+              
+              <div className="modal-footer" style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                <button type="button" className="action-btn delete" onClick={() => setShowPasswordModal(false)}>
+                  取消
+                </button>
+                <button type="submit" className="action-btn edit">
+                  確認執行
                 </button>
               </div>
             </form>

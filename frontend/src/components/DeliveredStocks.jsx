@@ -23,6 +23,12 @@ export default function DeliveredStocks() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [adminPassword, setAdminPassword] = useState('');
+
+  // Custom delete password modal states
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [pendingDeleteId, setPendingDeleteId] = useState(null);
   
   // Form Fields
   const [fcnCode, setFcnCode] = useState('');
@@ -173,26 +179,38 @@ export default function DeliveredStocks() {
   };
 
   // Delete Item
-  const handleDelete = async (id) => {
+  const handleDelete = (id) => {
     if (!window.confirm('確定要刪除此筆接股持倉紀錄嗎？此操作不可復原。')) {
       return;
     }
-    const pwd = window.prompt('請輸入管理員密碼以確認刪除:');
-    if (pwd === null) return;
+    setPendingDeleteId(id);
+    setShowPasswordModal(true);
+    setAdminPasswordInput('');
+    setPasswordError('');
+  };
 
-    try {
-      const response = await fetch(`/api/delivered-stocks/${id}`, {
-        method: 'DELETE',
-        headers: { 'X-Admin-Password': pwd }
-      });
-      if (response.ok) {
-        fetchList();
-      } else {
-        const err = await response.json();
-        alert(err.error || '刪除失敗，密碼錯誤或權限不足');
+  const handlePasswordModalSubmit = async (e) => {
+    e.preventDefault();
+    if (adminPasswordInput === '940929') {
+      setShowPasswordModal(false);
+      if (pendingDeleteId) {
+        try {
+          const response = await fetch(`/api/delivered-stocks/${pendingDeleteId}`, {
+            method: 'DELETE',
+            headers: { 'X-Admin-Password': '940929' }
+          });
+          if (response.ok) {
+            fetchList();
+          } else {
+            const err = await response.json();
+            alert(err.error || '刪除失敗，密碼錯誤或權限不足');
+          }
+        } catch (err) {
+          alert('刪除請求失敗: ' + err.message);
+        }
       }
-    } catch (err) {
-      alert('刪除請求失敗: ' + err.message);
+    } else {
+      setPasswordError('密碼錯誤，拒絕存取！');
     }
   };
 
@@ -823,6 +841,58 @@ export default function DeliveredStocks() {
                 </button>
                 <button type="submit" className="action-btn edit">
                   儲存持倉
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Password Modal Dialogue for deletion */}
+      {showPasswordModal && (
+        <div className="modal-overlay" onClick={() => setShowPasswordModal(false)}>
+          <div className="modal-content glass-card" style={{ maxWidth: '400px', width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">🔒 需要管理權限</h3>
+              <button className="close-btn" onClick={() => setShowPasswordModal(false)}>×</button>
+            </div>
+            
+            <form onSubmit={handlePasswordModalSubmit}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '0.5rem 0' }}>
+                <div className="form-group">
+                  <label>管理者密碼</label>
+                  <input 
+                    type="password" 
+                    placeholder="請輸入管理密碼以確認此操作" 
+                    value={adminPasswordInput}
+                    onChange={e => setAdminPasswordInput(e.target.value)}
+                    required
+                    autoFocus
+                    style={{
+                      width: '100%',
+                      background: 'rgba(0,0,0,0.3)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '6px',
+                      padding: '0.6rem 0.8rem',
+                      color: 'var(--text-primary)',
+                      fontFamily: 'inherit'
+                    }}
+                  />
+                </div>
+                
+                {passwordError && (
+                  <div style={{ color: 'var(--color-danger)', fontSize: '0.88rem', fontWeight: 500 }}>
+                    ⚠️ {passwordError}
+                  </div>
+                )}
+              </div>
+              
+              <div className="modal-footer" style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                <button type="button" className="action-btn delete" onClick={() => setShowPasswordModal(false)}>
+                  取消
+                </button>
+                <button type="submit" className="action-btn edit">
+                  確認執行
                 </button>
               </div>
             </form>
