@@ -50,6 +50,36 @@ app.use((req, res, next) => {
   next();
 });
 
+// Helper to get the latest completed US trading date based on New York wall-clock time
+function getLatestClosedTradingDate() {
+  const nyStr = new Date().toLocaleString("en-US", { timeZone: "America/New_York" });
+  const nyDate = new Date(nyStr);
+  const year = nyDate.getFullYear();
+  const month = nyDate.getMonth();
+  const date = nyDate.getDate();
+  
+  // US markets close at 4:00 PM EST/EDT
+  const marketCloseToday = new Date(year, month, date, 16, 0, 0);
+  
+  let latestTradingDate = new Date(year, month, date);
+  if (nyDate < marketCloseToday) {
+    latestTradingDate.setDate(latestTradingDate.getDate() - 1);
+  }
+  
+  // Adjust for weekends (if Saturday, go back to Friday; if Sunday, go back to Friday)
+  let checkDay = latestTradingDate.getDay();
+  if (checkDay === 6) {
+    latestTradingDate.setDate(latestTradingDate.getDate() - 1);
+  } else if (checkDay === 0) {
+    latestTradingDate.setDate(latestTradingDate.getDate() - 2);
+  }
+  
+  const y = latestTradingDate.getFullYear();
+  const m = String(latestTradingDate.getMonth() + 1).padStart(2, '0');
+  const d = String(latestTradingDate.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 // Helper for fetch with timeout (prevents slow APIs from locking the server)
 async function fetchWithTimeout(url, options = {}, timeoutMs = 3000) {
   const controller = new AbortController();
@@ -659,13 +689,7 @@ app.get('/api/fcns', async (req, res) => {
         const lockInMonths = fcn.lockInMonths !== undefined ? Number(fcn.lockInMonths) : 1;
         const startDate = new Date(fcn.startDate);
         const koStartDate = new Date(startDate.setMonth(startDate.getMonth() + lockInMonths));
-        const today = new Date();
-        const todayStr = today.toLocaleDateString('zh-TW', {
-          timeZone: 'Asia/Taipei',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit'
-        }).replace(/\//g, '-');
+        const todayStr = getLatestClosedTradingDate();
         
         const isStepDown = fcn.name.toLowerCase().includes('stepdown') || 
                            fcn.name.toLowerCase().includes('step down') || 
@@ -697,7 +721,7 @@ app.get('/api/fcns', async (req, res) => {
           }
 
           if (firstObsDateStr) {
-            const dToday = new Date(today);
+            const dToday = new Date(todayStr);
             dToday.setHours(0,0,0,0);
             const dFirstObs = new Date(firstObsDateStr);
             dFirstObs.setHours(0,0,0,0);
@@ -965,13 +989,7 @@ async function evaluateFCNTriggers() {
     let modified = false;
     
     let isEvaluationDay = false;
-    const today = new Date();
-    const todayStr = today.toLocaleDateString('zh-TW', {
-      timeZone: 'Asia/Taipei',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).replace(/\//g, '-');
+    const todayStr = getLatestClosedTradingDate();
 
     const isStepDown = fcn.name.toLowerCase().includes('stepdown') || 
                        fcn.name.toLowerCase().includes('step down') || 
@@ -1005,7 +1023,7 @@ async function evaluateFCNTriggers() {
       }
 
       if (firstObsDateStr) {
-        const dToday = new Date(today);
+        const dToday = new Date(todayStr);
         dToday.setHours(0,0,0,0);
         const dFirstObs = new Date(firstObsDateStr);
         dFirstObs.setHours(0,0,0,0);
@@ -1066,14 +1084,9 @@ async function evaluateFCNTriggers() {
       await sendLineNotification(msg);
     }
 
-    // Check if today is the maturity date (Taipei Time) to send a LINE reminder
+    // Check if today is the maturity date (based on US latest closed trading date) to send a LINE reminder
     if (fcn.maturityDate) {
-      const todayStr = new Date().toLocaleDateString('zh-TW', {
-        timeZone: 'Asia/Taipei',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).replace(/\//g, '-');
+      const todayStr = getLatestClosedTradingDate();
 
       if (fcn.maturityDate === todayStr) {
         console.log(`[Maturity Alert] FCN "${fcn.name}" has reached maturity date: ${fcn.maturityDate}`);
