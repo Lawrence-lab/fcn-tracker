@@ -735,9 +735,6 @@ app.get('/api/fcns', async (req, res) => {
             isKoTriggered = true;
             fcn.isKoTriggered = true;
             dbModified = true;
-            
-            const msg = `🔔 FCN 敲出提醒！\n\n您的商品「${fcn.name}」所有標的皆已高於敲出水位 (${fcn.stocks?.[0]?.koPercent}%)，已滿足評價敲出條件 (KO)！\n\n請登入系統辦理結算平倉：\nhttps://fcn-tracking.zeabur.app/`;
-            sendLineNotification(msg).catch(err => console.error('[API] Failed to send LINE notification for KO:', err.message));
           }
         }
       }
