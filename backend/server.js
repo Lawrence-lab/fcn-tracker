@@ -733,8 +733,6 @@ app.get('/api/fcns', async (req, res) => {
           const allStocksAboveKo = enrichedStocks.every(s => s.currentPercent !== null && s.currentPercent >= s.koPercent);
           if (allStocksAboveKo) {
             isKoTriggered = true;
-            fcn.isKoTriggered = true;
-            dbModified = true;
           }
         }
       }
@@ -745,7 +743,6 @@ app.get('/api/fcns', async (req, res) => {
         const idx = fcns.findIndex(item => item.id === fcn.id);
         if (idx !== -1) {
           fcns[idx].isKnockedIn = fcn.isKnockedIn;
-          fcns[idx].isKoTriggered = fcn.isKoTriggered;
           fcns[idx].stocks = fcn.stocks; // Update stocks array to persist wasBelowKi status
         }
       }
@@ -981,7 +978,7 @@ async function evaluateFCNTriggers() {
   
   for (let fcn of fcns) {
     if (fcn.status !== 'Active') continue;
-    if (fcn.isKoTriggered) continue; // Skip if already triggered KO
+    if (fcn.koNotified) continue; // Skip KO check only if notification already sent
     
     let modified = false;
     
@@ -1072,9 +1069,10 @@ async function evaluateFCNTriggers() {
       }
     }
     
-    if (allStocksAboveKo) {
+    if (allStocksAboveKo && !fcn.koNotified) {
       console.log(`[Auto-Trigger Alert] FCN "${fcn.name}" has met KO (Knock-out) conditions. All underlying stocks are at or above their KO barriers.`);
       fcn.isKoTriggered = true;
+      fcn.koNotified = true;
       modified = true;
       
       const msg = `🔔 FCN 敲出提醒！\n\n您的商品「${fcn.name}」所有標的皆已高於敲出水位 (${fcn.stocks?.[0]?.koPercent}%)，已滿足評價敲出條件 (KO)！\n\n請登入系統辦理結算平倉：\nhttps://fcn-tracking.zeabur.app/`;
@@ -1082,7 +1080,7 @@ async function evaluateFCNTriggers() {
     }
 
     // Check if today is the maturity date (based on US latest closed trading date) to send a LINE reminder
-    if (fcn.maturityDate) {
+    if (fcn.maturityDate && !fcn.maturityNotified && !fcn.isKoTriggered) {
       const todayStr = getLatestClosedTradingDate();
 
       if (fcn.maturityDate === todayStr) {
@@ -1096,6 +1094,8 @@ async function evaluateFCNTriggers() {
 
         const msg = `🔔 FCN 到期提醒！\n\n您的商品「${fcn.name}」已於今日（${fcn.maturityDate}）達到合約到期日！\n\n最終標的表現：\n最差標的為 ${worstStock ? worstStock.symbol : '無'} (${worstStock ? worstStock.currentPercent.toFixed(2) : 0}%)\n\n${outcomeText}\n\n請登入系統辦理結算平倉：\nhttps://fcn-tracking.zeabur.app/`;
         
+        fcn.maturityNotified = true;
+        modified = true;
         await sendLineNotification(msg);
       }
     }
