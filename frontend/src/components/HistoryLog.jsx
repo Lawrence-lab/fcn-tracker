@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 
-export default function HistoryLog({ fcns, onDelete }) {
+export default function HistoryLog({ fcns, onEdit, onDelete }) {
   const [search, setSearch] = useState('');
+  const [selectedOwner, setSelectedOwner] = useState('all');
   const [expandedId, setExpandedId] = useState(null);
   const settledFcns = fcns.filter(item => item.status !== 'Active');
+
+  const allOwners = Array.from(new Set(settledFcns.map(f => (f.owner || '').trim()).filter(Boolean)));
 
   const formatCurrency = (val, cur) => {
     return new Intl.NumberFormat('zh-TW', {
@@ -33,9 +36,11 @@ export default function HistoryLog({ fcns, onDelete }) {
   // Filter List
   const filteredList = settledFcns.filter(item => {
     const q = search.toLowerCase();
-    return (
+    const matchOwner = selectedOwner === 'all' || (item.owner || '').trim() === selectedOwner;
+    return matchOwner && (
       (item.name || '').toLowerCase().includes(q) ||
       (item.bank || '').toLowerCase().includes(q) ||
+      (item.owner || '').toLowerCase().includes(q) ||
       (item.note || '').toLowerCase().includes(q) ||
       (item.settlement?.note || '').toLowerCase().includes(q)
     );
@@ -118,16 +123,17 @@ export default function HistoryLog({ fcns, onDelete }) {
         </p>
       </div>
 
-      {/* Search Bar */}
+      {/* Search & Filter Bar */}
       {settledFcns.length > 0 && (
-        <div className="glass-card search-bar" style={{ padding: '1rem', marginBottom: '1.5rem' }}>
+        <div className="glass-card search-bar" style={{ padding: '0.8rem 1rem', marginBottom: '1.5rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <input
             type="text"
-            placeholder="搜尋已到期合約名稱、發行機構、備註..."
+            placeholder="搜尋已到期合約名稱、發行機構、擁有者、備註..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={{
-              width: '100%',
+              flex: 1,
+              minWidth: '220px',
               background: 'rgba(0,0,0,0.3)',
               border: '1px solid var(--border-color)',
               borderRadius: '6px',
@@ -136,6 +142,27 @@ export default function HistoryLog({ fcns, onDelete }) {
               fontSize: '0.95rem'
             }}
           />
+          {allOwners.length > 0 && (
+            <select
+              value={selectedOwner}
+              onChange={(e) => setSelectedOwner(e.target.value)}
+              style={{
+                padding: '0.6rem 1rem',
+                fontSize: '0.9rem',
+                background: '#111827',
+                border: '1px solid var(--border-color)',
+                borderRadius: '6px',
+                color: '#38bdf8',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              <option value="all">全部擁有者 ({settledFcns.length})</option>
+              {allOwners.map(ownerName => (
+                <option key={ownerName} value={ownerName}>👤 {ownerName}</option>
+              ))}
+            </select>
+          )}
         </div>
       )}
 
@@ -350,7 +377,14 @@ export default function HistoryLog({ fcns, onDelete }) {
                           )}
                         </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '2rem' }}>
+                          <button 
+                            className="action-btn edit"
+                            style={{ padding: '0.4rem 1rem', fontSize: '0.85rem', fontWeight: 600 }}
+                            onClick={() => onEdit && onEdit(item)}
+                          >
+                            ✏️ 編輯條款 / 擁有者
+                          </button>
                           <button 
                             className="action-btn delete"
                             style={{ padding: '0.4rem 1rem', fontSize: '0.85rem', fontWeight: 600 }}

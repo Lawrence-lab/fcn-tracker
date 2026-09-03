@@ -109,8 +109,9 @@ export default function App() {
         });
 
         if (response.ok) {
+          const wasSettled = editingFcn && editingFcn.status !== 'Active';
           setEditingFcn(null);
-          setActiveTab('list');
+          setActiveTab(wasSettled ? 'history' : 'list');
           fetchFCNS();
         } else {
           const err = await response.json();
@@ -340,8 +341,9 @@ export default function App() {
               editingFcn={editingFcn}
               onSubmit={handleFormSubmit}
               onCancel={() => {
+                const wasSettled = editingFcn && editingFcn.status !== 'Active';
                 setEditingFcn(null);
-                setActiveTab('list');
+                setActiveTab(wasSettled ? 'history' : 'list');
               }}
             />
           )}
@@ -357,6 +359,7 @@ export default function App() {
           {activeTab === 'history' && (
             <HistoryLog 
               fcns={fcns}
+              onEdit={handleEditFcn}
               onDelete={handleDeleteFcn}
             />
           )}
