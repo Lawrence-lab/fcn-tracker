@@ -10,7 +10,7 @@
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "build": "npm run --prefix frontend build",
     "start": "node backend/server.js",
-    "postinstall": "npm install --prefix frontend"
+    "postinstall": "npm install --prefix frontend --include=dev"
   },
   "dependencies": {
     "concurrently": "^8.2.2",

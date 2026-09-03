@@ -243,8 +243,7 @@ export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh, o
             />
             <div 
               className="gauge-range initial-ko" 
-              style={{ left: getLeft(koPercent), width: `calc(${getLeft(maxPercent)} - ${getLeft(koPercent)})` }}
-              style={{ opacity: 0.15, background: 'var(--color-purple)' }}
+              style={{ left: getLeft(koPercent), width: `calc(${getLeft(maxPercent)} - ${getLeft(koPercent)})`, opacity: 0.15, background: 'var(--color-purple)' }}
             />
 
             {/* Milestones marker dots */}
