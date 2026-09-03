@@ -1,12 +1,64 @@
 import React, { useState } from 'react';
 
-export default function HistoryLog({ fcns, onEdit, onDelete }) {
+export default function HistoryLog({ fcns, onRefresh, onEdit, onDelete }) {
   const [search, setSearch] = useState('');
   const [selectedOwner, setSelectedOwner] = useState('all');
   const [expandedId, setExpandedId] = useState(null);
+  
+  // Quick Edit Owner Modal State
+  const [quickEditOwnerModal, setQuickEditOwnerModal] = useState(null);
+  const [ownerInput, setOwnerInput] = useState('');
+  const [ownerPassword, setOwnerPassword] = useState('');
+  const [ownerError, setOwnerError] = useState('');
+  const [ownerSaving, setOwnerSaving] = useState(false);
+
   const settledFcns = fcns.filter(item => item.status !== 'Active');
 
   const allOwners = Array.from(new Set(settledFcns.map(f => (f.owner || '').trim()).filter(Boolean)));
+
+  const handleOpenQuickEditOwner = (item) => {
+    setQuickEditOwnerModal(item);
+    setOwnerInput(item.owner || '');
+    setOwnerPassword('');
+    setOwnerError('');
+  };
+
+  const handleSaveOwner = async (e) => {
+    e.preventDefault();
+    setOwnerError('');
+    if (!ownerPassword) {
+      setOwnerError('請輸入管理密碼');
+      return;
+    }
+    setOwnerSaving(true);
+    try {
+      const response = await fetch(`/api/fcns/${quickEditOwnerModal.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Password': ownerPassword
+        },
+        body: JSON.stringify({
+          owner: ownerInput.trim()
+        })
+      });
+
+      if (response.ok) {
+        setQuickEditOwnerModal(null);
+        if (onRefresh) {
+          await onRefresh();
+        }
+      } else {
+        const err = await response.json();
+        setOwnerError(err.error || '密碼錯誤或儲存失敗');
+      }
+    } catch (err) {
+      console.error('Failed to update owner:', err);
+      setOwnerError('連線失敗');
+    } finally {
+      setOwnerSaving(false);
+    }
+  };
 
   const formatCurrency = (val, cur) => {
     return new Intl.NumberFormat('zh-TW', {
@@ -277,9 +329,35 @@ export default function HistoryLog({ fcns, onEdit, onDelete }) {
                       {/* Left: Contract Info Pane */}
                       <div className="contract-details-pane" style={{ padding: 0, background: 'none', border: 'none' }}>
                         <h4 style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: '0.5rem' }}>原始合約詳細條款</h4>
-                        <div className="detail-row">
+                        <div className="detail-row" style={{ alignItems: 'center' }}>
                           <span className="label">合約擁有者</span>
-                          <span className="val" style={{ color: '#38bdf8', fontWeight: 600 }}>{item.owner ? `👤 ${item.owner}` : '本人 / 未設定'}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                            <span className="val" style={{ color: '#38bdf8', fontWeight: 700, fontSize: '0.95rem' }}>
+                              {item.owner ? `👤 ${item.owner}` : '本人 / 未設定'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenQuickEditOwner(item);
+                              }}
+                              style={{
+                                background: 'rgba(56, 189, 248, 0.15)',
+                                border: '1px solid rgba(56, 189, 248, 0.4)',
+                                color: '#38bdf8',
+                                borderRadius: '6px',
+                                padding: '3px 10px',
+                                fontSize: '0.8rem',
+                                cursor: 'pointer',
+                                fontWeight: 600,
+                                transition: 'all 0.2s ease'
+                              }}
+                              onMouseOver={e => e.currentTarget.style.background = 'rgba(56, 189, 248, 0.25)'}
+                              onMouseOut={e => e.currentTarget.style.background = 'rgba(56, 189, 248, 0.15)'}
+                            >
+                              ✏️ 修改擁有者
+                            </button>
+                          </div>
                         </div>
                         <div className="detail-row">
                           <span className="label">交易日期</span>
@@ -405,6 +483,89 @@ export default function HistoryLog({ fcns, onEdit, onDelete }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Quick Edit Owner Modal Dialog */}
+      {quickEditOwnerModal && (
+        <div className="modal-overlay" onClick={() => setQuickEditOwnerModal(null)}>
+          <div className="modal-content glass-card" style={{ maxWidth: '420px', width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">👤 修改合約擁有者</h3>
+            </div>
+            <form onSubmit={handleSaveOwner}>
+              <div style={{ marginBottom: '1rem' }}>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+                  為歷史合約 <strong>{quickEditOwnerModal.name}</strong> 指定擁有者：
+                </p>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  擁有者 / 投資人名稱：
+                </label>
+                <input
+                  type="text"
+                  placeholder="例如: 本人、媽媽、爸爸、配偶..."
+                  value={ownerInput}
+                  onChange={e => setOwnerInput(e.target.value)}
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    padding: '0.65rem 0.9rem',
+                    background: 'rgba(0,0,0,0.3)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '6px',
+                    color: '#fff',
+                    fontSize: '0.95rem',
+                    marginBottom: '1rem'
+                  }}
+                />
+
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  管理密碼：
+                </label>
+                <input
+                  type="password"
+                  placeholder="請輸入管理密碼 (預設: 940929)"
+                  value={ownerPassword}
+                  onChange={e => setOwnerPassword(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.65rem 0.9rem',
+                    background: 'rgba(0,0,0,0.3)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '6px',
+                    color: '#fff',
+                    fontSize: '0.95rem'
+                  }}
+                />
+              </div>
+
+              {ownerError && (
+                <div style={{ color: 'var(--color-danger)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+                  ⚠️ {ownerError}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem' }}>
+                <button
+                  type="button"
+                  className="action-btn"
+                  onClick={() => setQuickEditOwnerModal(null)}
+                  disabled={ownerSaving}
+                  style={{ background: 'transparent', border: '1px solid var(--border-color)' }}
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  className="action-btn edit"
+                  disabled={ownerSaving}
+                  style={{ background: 'var(--color-primary)', color: '#fff', fontWeight: 600 }}
+                >
+                  {ownerSaving ? '儲存中...' : '確認儲存'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

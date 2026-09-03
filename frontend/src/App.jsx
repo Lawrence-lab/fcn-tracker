@@ -359,6 +359,7 @@ export default function App() {
           {activeTab === 'history' && (
             <HistoryLog 
               fcns={fcns}
+              onRefresh={fetchFCNS}
               onEdit={handleEditFcn}
               onDelete={handleDeleteFcn}
             />
