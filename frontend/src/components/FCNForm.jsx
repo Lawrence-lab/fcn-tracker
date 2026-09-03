@@ -12,6 +12,7 @@ const emptyStock = () => ({
 export default function FCNForm({ editingFcn, onSubmit, onCancel }) {
   const [name, setName] = useState('');
   const [bank, setBank] = useState('');
+  const [owner, setOwner] = useState('');
   const [currency, setCurrency] = useState('USD');
   const [principal, setPrincipal] = useState('');
   const [annualCouponRate, setAnnualCouponRate] = useState('');
@@ -208,6 +209,7 @@ Important Rules for stock calculations:
     if (editingFcn) {
       setName(editingFcn.name || '');
       setBank(editingFcn.bank || '');
+      setOwner(editingFcn.owner || '');
       setCurrency(editingFcn.currency || 'USD');
       setPrincipal(editingFcn.principal || '');
       setAnnualCouponRate(editingFcn.annualCouponRate || '');
@@ -237,6 +239,7 @@ Important Rules for stock calculations:
       // Clear form
       setName('');
       setBank('');
+      setOwner('');
       setCurrency('USD');
       setPrincipal('');
       setAnnualCouponRate('');
@@ -292,6 +295,7 @@ Important Rules for stock calculations:
     const payload = {
       name,
       bank,
+      owner: owner.trim(),
       currency,
       principal: Number(principal),
       annualCouponRate: Number(annualCouponRate),
@@ -391,6 +395,17 @@ Important Rules for stock calculations:
               value={name} 
               onChange={e => setName(e.target.value)} 
               required
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="fcn-owner">合約擁有者 / 投資人 (例如: 本人、媽媽)</label>
+            <input 
+              id="fcn-owner"
+              type="text" 
+              placeholder="例如: 本人、媽媽、配偶..." 
+              value={owner} 
+              onChange={e => setOwner(e.target.value)} 
             />
           </div>
 

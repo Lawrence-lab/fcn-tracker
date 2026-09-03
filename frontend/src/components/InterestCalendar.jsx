@@ -47,6 +47,7 @@ export default function InterestCalendar({ fcns }) {
           schedule.push({
             fcnId: fcn.id,
             fcnName: fcn.name,
+            owner: fcn.owner || '',
             currency: fcn.currency,
             month: monthKey,
             dateStr: dateStr,
@@ -67,6 +68,7 @@ export default function InterestCalendar({ fcns }) {
         schedule.push({
           fcnId: fcn.id,
           fcnName: fcn.name,
+          owner: fcn.owner || '',
           currency: fcn.currency,
           month: monthKey,
           dateStr: estimatedDateStr,
@@ -82,6 +84,7 @@ export default function InterestCalendar({ fcns }) {
         schedule.push({
           fcnId: fcn.id,
           fcnName: fcn.name,
+          owner: fcn.owner || '',
           currency: fcn.currency,
           month: monthKey,
           dateStr: estimatedDateStr,
@@ -97,6 +100,7 @@ export default function InterestCalendar({ fcns }) {
       schedule.push({
         fcnId: fcn.id,
         fcnName: fcn.name,
+        owner: fcn.owner || '',
         currency: fcn.currency,
         month: monthKey,
         dateStr: fcn.maturityDate,
@@ -253,7 +257,14 @@ export default function InterestCalendar({ fcns }) {
                         return (
                           <tr key={`${pay.fcnId}-${idx}`}>
                             <td style={{ padding: '0.6rem 1rem', fontWeight: 600 }}>
-                              {pay.fcnName}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                {pay.owner && (
+                                  <span style={{ fontSize: '0.72rem', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.12)', padding: '1px 6px', borderRadius: '4px', border: '1px solid rgba(56, 189, 248, 0.25)', fontWeight: 600 }}>
+                                    👤 {pay.owner}
+                                  </span>
+                                )}
+                                <span>{pay.fcnName}</span>
+                              </div>
                             </td>
                             <td style={{ padding: '0.6rem 1rem' }}>
                               {pay.dateStr || '估計日'}

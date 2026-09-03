@@ -182,6 +182,11 @@ export default function HistoryLog({ fcns, onDelete }) {
                       <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                         {item.name}
                       </span>
+                      {item.owner && (
+                        <span style={{ fontSize: '0.72rem', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.12)', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(56, 189, 248, 0.25)', fontWeight: 600 }}>
+                          👤 {item.owner}
+                        </span>
+                      )}
                       <span className={`fcn-badge ${statusMeta.class}`} style={{ padding: '0.15rem 0.5rem', fontSize: '0.7rem' }}>
                         {statusMeta.text}
                       </span>
@@ -245,6 +250,10 @@ export default function HistoryLog({ fcns, onDelete }) {
                       {/* Left: Contract Info Pane */}
                       <div className="contract-details-pane" style={{ padding: 0, background: 'none', border: 'none' }}>
                         <h4 style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: '0.5rem' }}>原始合約詳細條款</h4>
+                        <div className="detail-row">
+                          <span className="label">合約擁有者</span>
+                          <span className="val" style={{ color: '#38bdf8', fontWeight: 600 }}>{item.owner ? `👤 ${item.owner}` : '本人 / 未設定'}</span>
+                        </div>
                         <div className="detail-row">
                           <span className="label">交易日期</span>
                           <span className="val">{item.tradeDate || '無'}</span>

@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh, onTestLine }) {
   const [expandedId, setExpandedId] = useState(null);
   const [search, setSearch] = useState('');
+  const [selectedOwner, setSelectedOwner] = useState('all');
   const [refreshing, setRefreshing] = useState(false);
 
   // Backup / Restore Modal States
@@ -12,10 +13,15 @@ export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh, o
   const [backupError, setBackupError] = useState('');
   const [backupSubmitting, setBackupSubmitting] = useState(false);
 
+  // Extract all unique owners from all active FCNs
+  const allOwners = Array.from(new Set(fcns.map(f => (f.owner || '').trim()).filter(Boolean)));
+
   const activeFcns = fcns.filter(
     item => item.status === 'Active' && 
+    (selectedOwner === 'all' || (item.owner || '').trim() === selectedOwner) &&
     (item.name.toLowerCase().includes(search.toLowerCase()) || 
-     item.bank.toLowerCase().includes(search.toLowerCase()))
+     (item.bank && item.bank.toLowerCase().includes(search.toLowerCase())) ||
+     (item.owner && item.owner.toLowerCase().includes(search.toLowerCase())))
   );
 
   const handleRefresh = async () => {
@@ -331,15 +337,36 @@ export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh, o
   return (
     <div className="fcn-list-container">
       <div className="fcn-section-header">
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <h2 className="fcn-section-title">未平倉商品列表</h2>
           <input 
             type="text" 
-            placeholder="搜尋商品名稱或銀行..." 
+            placeholder="搜尋商品、銀行或擁有者..." 
             value={search} 
             onChange={(e) => setSearch(e.target.value)}
-            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', width: '220px', background: '#111827', border: '1px solid var(--border-color)', borderRadius: '8px', color: '#fff' }}
+            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', width: '200px', background: '#111827', border: '1px solid var(--border-color)', borderRadius: '8px', color: '#fff' }}
           />
+          {allOwners.length > 0 && (
+            <select
+              value={selectedOwner}
+              onChange={(e) => setSelectedOwner(e.target.value)}
+              style={{
+                padding: '0.4rem 0.8rem',
+                fontSize: '0.85rem',
+                background: '#111827',
+                border: '1px solid var(--border-color)',
+                borderRadius: '8px',
+                color: '#38bdf8',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              <option value="all">全部擁有者 ({fcns.filter(f => f.status === 'Active').length})</option>
+              {allOwners.map(ownerName => (
+                <option key={ownerName} value={ownerName}>👤 {ownerName}</option>
+              ))}
+            </select>
+          )}
         </div>
         <button 
           className={`refresh-button ${refreshing ? 'spinning' : ''}`}
@@ -409,6 +436,14 @@ export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh, o
                   <div className="fcn-info">
                     <div className="fcn-title">{item.name}</div>
                     <div className="fcn-meta">
+                      {item.owner && (
+                        <>
+                          <span className="fcn-meta-item" style={{ color: '#38bdf8', fontWeight: 600, background: 'rgba(56, 189, 248, 0.12)', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(56, 189, 248, 0.25)' }}>
+                            👤 {item.owner}
+                          </span>
+                          <span className="fcn-meta-item">•</span>
+                        </>
+                      )}
                       <span className="fcn-meta-item">
                         🏢 {item.bank}
                       </span>
@@ -470,6 +505,10 @@ export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh, o
                       {/* Right: Contract summary Details */}
                       <div className="contract-details-pane">
                         <h4 className="contract-pane-title">合約詳細條款</h4>
+                        <div className="detail-row">
+                          <span className="label">合約擁有者</span>
+                          <span className="val" style={{ color: '#38bdf8', fontWeight: 600 }}>{item.owner ? `👤 ${item.owner}` : '本人 / 未設定'}</span>
+                        </div>
                         <div className="detail-row">
                           <span className="label">交易日期</span>
                           <span className="val">{item.tradeDate || '無'}</span>
