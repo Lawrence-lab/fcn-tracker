@@ -6,6 +6,7 @@ import FCNForm from './components/FCNForm';
 import HistoryLog from './components/HistoryLog';
 import InterestCalendar from './components/InterestCalendar';
 import DeliveredStocks from './components/DeliveredStocks';
+import UpcomingEvaluations from './components/UpcomingEvaluations';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -331,6 +332,15 @@ export default function App() {
               fcns={fcns} 
               onEdit={handleEditFcn}
               onDelete={handleDeleteFcn}
+              onSettle={handleOpenSettle}
+              onRefresh={handleRefreshPrices}
+            />
+          )}
+
+          {activeTab === 'upcoming' && (
+            <UpcomingEvaluations 
+              fcns={fcns}
+              onEdit={handleEditFcn}
               onSettle={handleOpenSettle}
               onRefresh={handleRefreshPrices}
             />

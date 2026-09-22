@@ -21,6 +21,12 @@ export default function Navbar({ activeTab, setActiveTab }) {
           未平倉商品
         </button>
         <button 
+          className={`nav-item ${activeTab === 'upcoming' ? 'active' : ''}`}
+          onClick={() => setActiveTab('upcoming')}
+        >
+          🎯 即將比價 (KO)
+        </button>
+        <button 
           className={`nav-item ${activeTab === 'interest' ? 'active' : ''}`}
           onClick={() => setActiveTab('interest')}
         >
