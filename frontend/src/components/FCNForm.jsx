@@ -21,6 +21,7 @@ export default function FCNForm({ editingFcn, onSubmit, onCancel }) {
   const [startDate, setStartDate] = useState('');
   const [maturityDate, setMaturityDate] = useState('');
   const [observationFrequency, setObservationFrequency] = useState('Monthly');
+  const [evaluationType, setEvaluationType] = useState('monthly');
   const [isKnockedIn, setIsKnockedIn] = useState(false);
   const [isEuropeanKi, setIsEuropeanKi] = useState(true);
   const [lockInMonths, setLockInMonths] = useState(1);
@@ -159,6 +160,7 @@ Important Rules for stock calculations:
       setStartDate(parsed.startDate || '');
       setMaturityDate(parsed.maturityDate || '');
       setObservationFrequency(parsed.observationFrequency || 'Monthly');
+      setEvaluationType(parsed.evaluationType || 'monthly');
       setLockInMonths(parsed.lockInMonths !== undefined ? parsed.lockInMonths : 1);
       setNote(parsed.note || '');
       setCouponPaymentDatesRaw(parsed.couponPaymentDates ? parsed.couponPaymentDates.join(', ') : '');
@@ -218,6 +220,7 @@ Important Rules for stock calculations:
       setStartDate(editingFcn.startDate || '');
       setMaturityDate(editingFcn.maturityDate || '');
       setObservationFrequency(editingFcn.observationFrequency || 'Monthly');
+      setEvaluationType(editingFcn.evaluationType || 'monthly');
       setIsKnockedIn(editingFcn.isKnockedIn || false);
       setIsEuropeanKi(editingFcn.isEuropeanKi !== undefined ? editingFcn.isEuropeanKi : true);
       setLockInMonths(editingFcn.lockInMonths !== undefined ? editingFcn.lockInMonths : 1);
@@ -304,6 +307,7 @@ Important Rules for stock calculations:
       startDate,
       maturityDate,
       observationFrequency,
+      evaluationType,
       isKnockedIn,
       isEuropeanKi,
       lockInMonths: Number(lockInMonths) || 1,
@@ -480,6 +484,19 @@ Important Rules for stock calculations:
             >
               <option value="Monthly">每月觀察 (Monthly)</option>
               <option value="Quarterly">每季觀察 (Quarterly)</option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="fcn-eval-type">KO 比價方式</label>
+            <select 
+              id="fcn-eval-type"
+              value={evaluationType} 
+              onChange={e => setEvaluationType(e.target.value)}
+            >
+              <option value="monthly">每月比價 (僅在觀察日比價)</option>
+              <option value="daily">每日比價 (首期後每個交易日比價)</option>
+              <option value="stepdown">Step-Down 每月比價 (KO 門檻遞減)</option>
             </select>
           </div>
 

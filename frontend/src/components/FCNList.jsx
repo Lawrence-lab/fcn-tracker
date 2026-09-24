@@ -531,14 +531,14 @@ export default function FCNList({ fcns, onEdit, onDelete, onSettle, onRefresh, o
                               if (!item.observationDates || item.observationDates.length === 0) {
                                 return '尚未設定 (系統將自動使用「約定配息日」進行比價判定)';
                               }
-                              const isStepDown = item.name.toLowerCase().includes('stepdown') || 
-                                                 item.name.toLowerCase().includes('step down') || 
-                                                 (item.note && (item.note.toLowerCase().includes('stepdown') || item.note.toLowerCase().includes('step down')));
-                              if (isStepDown) {
-                                return `每月比價 (Step Down)：${item.observationDates.join(', ')}`;
-                              } else {
+                              const evalType = item.evaluationType || 'monthly';
+                              if (evalType === 'daily') {
                                 const sorted = [...item.observationDates].sort((a, b) => new Date(a) - new Date(b));
                                 return `${sorted[0]} 起每日比價`;
+                              } else if (evalType === 'stepdown') {
+                                return `每月比價 (Step Down)：${item.observationDates.join(', ')}`;
+                              } else {
+                                return `每月比價：${item.observationDates.join(', ')}`;
                               }
                             })()}
                           </span>

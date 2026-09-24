@@ -38,9 +38,8 @@ export default function UpcomingEvaluations({ fcns, onEdit, onSettle, onRefresh 
 
   // Calculate upcoming evaluation details for each active FCN
   const upcomingItems = activeFcns.map(fcn => {
-    const isStepDown = fcn.name.toLowerCase().includes('stepdown') || 
-                       fcn.name.toLowerCase().includes('step down') || 
-                       (fcn.note && (fcn.note.toLowerCase().includes('stepdown') || fcn.note.toLowerCase().includes('step down')));
+    const evalType = fcn.evaluationType || 'monthly';
+    const isDaily = evalType === 'daily';
 
     let nextObservationDate = null;
     let diffDays = null;
@@ -50,8 +49,8 @@ export default function UpcomingEvaluations({ fcns, onEdit, onSettle, onRefresh 
     let totalObservationCount = 0;
     let currentPeriodIndex = 0;
 
-    if (isStepDown) {
-      // Step-Down FCN: specific observation dates
+    if (!isDaily) {
+      // Monthly or Step-Down FCN: specific observation dates
       const dates = (fcn.observationDates && fcn.observationDates.length > 0)
         ? [...fcn.observationDates].sort()
         : (fcn.couponPaymentDates ? [...fcn.couponPaymentDates].sort() : []);
@@ -69,11 +68,11 @@ export default function UpcomingEvaluations({ fcns, onEdit, onSettle, onRefresh 
         const dTarget = new Date(nextObservationDate);
         dTarget.setHours(0,0,0,0);
         diffDays = Math.round((dTarget - dToday) / (1000 * 60 * 60 * 24));
-        observationType = 'Step-Down 每月定日比價';
+        observationType = evalType === 'stepdown' ? 'Step-Down 每月定日比價' : '每月定日比價';
         periodInfo = `第 ${currentPeriodIndex} / ${totalObservationCount} 期比價`;
       }
     } else {
-      // Non-Step-Down FCN: evaluates daily after the first observation date
+      // Daily FCN: evaluates daily after the first observation date
       let firstObsDateStr = null;
       if (fcn.observationDates && fcn.observationDates.length > 0) {
         const sortedDates = [...fcn.observationDates].sort();
