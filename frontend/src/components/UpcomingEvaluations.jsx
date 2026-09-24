@@ -153,7 +153,7 @@ export default function UpcomingEvaluations({ fcns, onEdit, onSettle, onRefresh 
 
     return {
       fcn,
-      isStepDown,
+      evalType,
       nextObservationDate,
       diffDays,
       isDailyActive,
@@ -391,7 +391,7 @@ export default function UpcomingEvaluations({ fcns, onEdit, onSettle, onRefresh 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {filteredItems.map(({
             fcn,
-            isStepDown,
+            evalType,
             nextObservationDate,
             diffDays,
             isDailyActive,
