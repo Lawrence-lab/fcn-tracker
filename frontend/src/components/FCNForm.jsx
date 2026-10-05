@@ -29,6 +29,10 @@ export default function FCNForm({ editingFcn, onSubmit, onCancel }) {
   const [note, setNote] = useState('');
   const [stocks, setStocks] = useState([emptyStock()]);
 
+  // Settlement edit state (when editing settled FCN from history log)
+  const [settlementCoupons, setSettlementCoupons] = useState('');
+  const [settlementDate, setSettlementDate] = useState('');
+
   // Coupon payment dates state
   const [couponPaymentDatesRaw, setCouponPaymentDatesRaw] = useState('');
   const [observationDatesRaw, setObservationDatesRaw] = useState('');
@@ -334,6 +338,13 @@ Important Rules for stock calculations:
       setNote(editingFcn.note || '');
       setCouponPaymentDatesRaw(editingFcn.couponPaymentDates ? editingFcn.couponPaymentDates.join(', ') : '');
       setObservationDatesRaw(editingFcn.observationDates ? editingFcn.observationDates.join(', ') : '');
+      if (editingFcn.settlement) {
+        setSettlementCoupons(editingFcn.settlement.totalCouponsEarned !== undefined ? editingFcn.settlement.totalCouponsEarned : '');
+        setSettlementDate(editingFcn.settlement.settleDate || '');
+      } else {
+        setSettlementCoupons('');
+        setSettlementDate('');
+      }
       if (editingFcn.stocks && editingFcn.stocks.length > 0) {
         // Strip out dynamic properties before editing
         setStocks(editingFcn.stocks.map(s => ({
@@ -364,6 +375,8 @@ Important Rules for stock calculations:
       setNote('');
       setCouponPaymentDatesRaw('');
       setObservationDatesRaw('');
+      setSettlementCoupons('');
+      setSettlementDate('');
       setStocks([emptyStock()]);
     }
   }, [editingFcn]);
@@ -430,6 +443,17 @@ Important Rules for stock calculations:
         strikePercent: Number(s.strikePercent)
       }))
     };
+
+    if (editingFcn && editingFcn.settlement) {
+      const couponsNum = settlementCoupons !== '' ? Number(settlementCoupons) : editingFcn.settlement.totalCouponsEarned;
+      const isCash = editingFcn.status === 'Knocked-Out' || editingFcn.status === 'Matured-Cash';
+      payload.settlement = {
+        ...editingFcn.settlement,
+        settleDate: settlementDate || editingFcn.settlement.settleDate,
+        totalCouponsEarned: couponsNum,
+        netProfit: isCash ? couponsNum : (couponsNum - (Number(editingFcn.settlement.stockValueLoss) || 0))
+      };
+    }
 
     onSubmit(payload);
   };
@@ -712,6 +736,40 @@ Important Rules for stock calculations:
             />
           </div>
         </div>
+
+        {/* Settlement Edit Section for Settled Contracts */}
+        {editingFcn && editingFcn.settlement && (
+          <div style={{ margin: '1.5rem 0', padding: '1.25rem', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '8px' }}>
+            <h3 style={{ color: '#10b981', fontSize: '1rem', marginBottom: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
+              <span>💰</span> 歷史平倉結算數據修改
+            </h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+              此商品已結算平倉，您可以在此手動修正實際收到的配息金額與結算日期。
+            </p>
+            <div className="form-grid">
+              <div className="form-group">
+                <label htmlFor="settle-coupons">實收利息總計 ({currency})</label>
+                <input 
+                  id="settle-coupons"
+                  type="number"
+                  step="any"
+                  value={settlementCoupons}
+                  onChange={e => setSettlementCoupons(e.target.value)}
+                  placeholder="例如: 525.5"
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="settle-date">結算平倉日期</label>
+                <input 
+                  id="settle-date"
+                  type="date"
+                  value={settlementDate}
+                  onChange={e => setSettlementDate(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Dynamic Stock Selection Section */}
         <div className="form-divider">
