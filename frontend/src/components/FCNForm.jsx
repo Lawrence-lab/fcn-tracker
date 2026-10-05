@@ -17,8 +17,9 @@ export default function FCNForm({ editingFcn, onSubmit, onCancel }) {
   const [principal, setPrincipal] = useState('');
   const [annualCouponRate, setAnnualCouponRate] = useState('');
   const [couponFrequency, setCouponFrequency] = useState('Monthly');
-  const [tradeDate, setTradeDate] = useState('');
-  const [startDate, setStartDate] = useState('');
+  const todayDateStr = new Date().toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
+  const [tradeDate, setTradeDate] = useState(todayDateStr);
+  const [startDate, setStartDate] = useState(todayDateStr);
   const [maturityDate, setMaturityDate] = useState('');
   const [observationFrequency, setObservationFrequency] = useState('Monthly');
   const [evaluationType, setEvaluationType] = useState('monthly');
@@ -68,6 +69,19 @@ export default function FCNForm({ editingFcn, onSubmit, onCancel }) {
       const promptText = `
 You are a professional structured financial product assistant. Analyze this FCN contract image and extract the terms into a structured JSON format.
 
+CRITICAL PURCHASE YEAR & DATE RULES:
+1. The user ALWAYS inputs/uploads the FCN/DAC contract IMMEDIATELY upon purchasing it. Therefore, the contract's purchase/trade date year is ALWAYS the CURRENT YEAR (${currentYear}).
+2. NEVER use a past year (such as ${currentYear - 1} or earlier) for tradeDate or startDate.
+   - E.g. If the sheet says "9月30日", parse tradeDate and startDate as "${currentYear}-09-30".
+3. Calculate all observationDates, couponPaymentDates, and maturityDate starting from tradeDate in ${currentYear}:
+   - Months that are equal to or after the tradeDate month belong to ${currentYear} (e.g. 10月 -> ${currentYear}-10, 11月 -> ${currentYear}-11, 12月 -> ${currentYear}-12).
+   - Months that roll over past December (e.g. 1月, 2月, ..., up to the contract term) MUST advance to the next year: ${currentYear + 1} (or ${currentYear + 2} for multi-year contracts).
+   - E.g. A 12M contract traded on September 30, ${currentYear}: final valuation in October is ${currentYear + 1}-10-07, maturity payment is ${currentYear + 1}-10-13!
+4. Evaluation Type Detection:
+   - If the product name starts with "DAC" or mentions Daily Auto-Call, set "evaluationType": "daily".
+   - If the contract has step-down KO barriers, set "evaluationType": "stepdown".
+   - Otherwise, set "evaluationType": "monthly".
+
 Output JSON structure:
 {
   "name": "FCN ${currentYear}SN3984" (or similar contract code/name),
@@ -77,12 +91,13 @@ Output JSON structure:
   "annualCouponRate": number (e.g. 24.00),
   "couponFrequency": "Monthly" or "Quarterly",
   "observationFrequency": "Monthly" or "Quarterly",
-  "tradeDate": "YYYY-MM-DD" (E.g. if July 7th is Trade Date and current year is ${currentYear}, parse as ${currentYear}-07-07),
-  "startDate": "YYYY-MM-DD" (E.g. July 16th -> ${currentYear}-07-16),
+  "evaluationType": "monthly" or "daily" or "stepdown",
+  "tradeDate": "YYYY-MM-DD" (MUST be year ${currentYear}),
+  "startDate": "YYYY-MM-DD" (MUST be year ${currentYear}),
   "maturityDate": "YYYY-MM-DD" (E.g. if final valuation date is March 1st and it crosses into next year, parse as ${currentYear + 1}-03-01),
   "lockInMonths": number (E.g. closed period / lock-in period in months. If 4-month closed period, parse as 4. If not specified or standard 1-month, parse as 1),
-  "observationDates": ["YYYY-MM-DD", "YYYY-MM-DD", ...], (Calculate the years for monthly valuation/observation dates relative to tradeDate. E.g. August 14th -> ${currentYear}-08-14, September 14th -> ${currentYear}-09-14, ...),
-  "couponPaymentDates": ["YYYY-MM-DD", "YYYY-MM-DD", ...], (Calculate the years for payment dates relative to tradeDate. E.g. September 2nd -> ${currentYear}-09-02, October 2nd -> ${currentYear}-10-02, ..., January 5th -> ${currentYear + 1}-01-05, February 3rd -> ${currentYear + 1}-02-03, March 3rd -> ${currentYear + 1}-03-03),
+  "observationDates": ["YYYY-MM-DD", "YYYY-MM-DD", ...], (Calculate the years starting from tradeDate ${currentYear}),
+  "couponPaymentDates": ["YYYY-MM-DD", "YYYY-MM-DD", ...], (Calculate the years starting from tradeDate ${currentYear}),
   "stocks": [
     {
       "symbol": "TSM",
@@ -101,9 +116,6 @@ Important Rules for stock calculations:
 2. Look at the Strike (履約價 / 執行價), KO (提前出場價 / 提前出場價) and KI (觸及生效價 / 觸及生效價) absolute values shown in the columns.
    Calculate their percentages relative to the initialPrice (期初定價 / 標的價格) where initialPrice represents 100.0%.
    Formula: percent = (absoluteValue / initialPrice) * 100.
-   - E.g. TSM Initial is 432.5700. Strike/執行價 is 251.1069. strikePercent = (251.1069 / 432.57) * 100 = 58.05%.
-   - E.g. TSM KO/提前出場價 is 432.5700. koPercent = (432.5700 / 432.5700) * 100 = 100.00%.
-   - E.g. TSM KI/觸及生效價 is 0.0000. kiPercent = (0.0000 / 432.5700) * 100 = 0.00%.
 3. Output ONLY a valid JSON string. Do NOT wrap it in markdown code blocks like \`\`\`json.
 `;
 
@@ -149,6 +161,101 @@ Important Rules for stock calculations:
       }
 
       const parsed = JSON.parse(text);
+
+      // Automated Fail-Safe: enforce current year as purchase year and advance dates across year-ends
+      function normalizeContractDates(data, curYear) {
+        function extractMonthDay(dateStr) {
+          if (!dateStr || typeof dateStr !== 'string') return null;
+          const match = dateStr.match(/(\d{1,2})[-/月](\d{1,2})/);
+          if (!match) return null;
+          const m = parseInt(match[1], 10);
+          const d = parseInt(match[2], 10);
+          if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+            return {
+              month: m,
+              day: d,
+              formatted: `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+            };
+          }
+          return null;
+        }
+
+        // 1. Force tradeDate to use currentYear (user enters immediately upon purchase)
+        let tradeMd = extractMonthDay(data.tradeDate);
+        let startMonth = 1;
+        if (tradeMd) {
+          data.tradeDate = `${curYear}-${tradeMd.formatted}`;
+          startMonth = tradeMd.month;
+        } else {
+          data.tradeDate = `${curYear}-01-01`;
+        }
+
+        // 2. startDate: use currentYear (unless month < startMonth)
+        let startMd = extractMonthDay(data.startDate);
+        if (startMd) {
+          const startYear = startMd.month < startMonth ? curYear + 1 : curYear;
+          data.startDate = `${startYear}-${startMd.formatted}`;
+        } else {
+          data.startDate = data.tradeDate;
+        }
+
+        // 3. Fix observationDates and couponPaymentDates with chronological year advancement
+        function fixDateList(dates) {
+          if (!Array.isArray(dates) || dates.length === 0) return dates;
+          let runningYear = curYear;
+          let prevMonth = startMonth;
+          return dates.map(dStr => {
+            const md = extractMonthDay(dStr);
+            if (!md) return dStr;
+            if (md.month < prevMonth) {
+              runningYear++;
+            }
+            prevMonth = md.month;
+            return `${runningYear}-${md.formatted}`;
+          });
+        }
+
+        if (data.observationDates) {
+          data.observationDates = fixDateList(data.observationDates);
+        }
+        if (data.couponPaymentDates) {
+          data.couponPaymentDates = fixDateList(data.couponPaymentDates);
+        }
+
+        // 4. Fix maturityDate
+        if (data.maturityDate) {
+          const matMd = extractMonthDay(data.maturityDate);
+          if (matMd) {
+            let matYear = curYear;
+            if (data.couponPaymentDates && data.couponPaymentDates.length > 0) {
+              const lastPaymentDate = data.couponPaymentDates[data.couponPaymentDates.length - 1];
+              const lastYear = parseInt(lastPaymentDate.split('-')[0], 10);
+              if (!isNaN(lastYear)) matYear = lastYear;
+            } else if (matMd.month <= startMonth) {
+              matYear = curYear + 1;
+            }
+            data.maturityDate = `${matYear}-${matMd.formatted}`;
+          }
+        }
+
+        // 5. Smart evaluationType detection if not explicitly specified
+        if (!data.evaluationType || data.evaluationType === 'monthly') {
+          if (data.name && data.name.toUpperCase().startsWith('DAC')) {
+            data.evaluationType = 'daily';
+          } else if (
+            data.name?.toLowerCase().includes('stepdown') ||
+            data.name?.toLowerCase().includes('step down') ||
+            data.note?.toLowerCase().includes('stepdown') ||
+            data.note?.toLowerCase().includes('step down')
+          ) {
+            data.evaluationType = 'stepdown';
+          }
+        }
+
+        return data;
+      }
+
+      normalizeContractDates(parsed, currentYear);
 
       setName(parsed.name || '');
       setBank(parsed.bank || '');
