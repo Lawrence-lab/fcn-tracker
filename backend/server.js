@@ -214,7 +214,7 @@ async function getStockPriceNasdaq(symbol) {
       updatedAt: new Date().toISOString()
     };
   } catch (error) {
-    console.error(`Error fetching Nasdaq data for ${symbol}:`, error.message);
+    console.log(`[Nasdaq API] Notice for ${symbol}:`, error.message);
     throw error;
   }
 }
@@ -233,7 +233,7 @@ async function getStockPriceGoogle(symbol) {
     const info = await fetchGoogleFinance(querySymbol);
     if (info) return info;
   } catch (err) {
-    console.warn(`[Google Finance] Failed for ${querySymbol}:`, err.message);
+    console.log(`[Google Finance] Notice for ${querySymbol}:`, err.message);
   }
 
   // Fallback to alternate exchange if not already specified with colon
@@ -245,7 +245,7 @@ async function getStockPriceGoogle(symbol) {
       const info = await fetchGoogleFinance(altQuerySymbol);
       if (info) return info;
     } catch (err) {
-      console.warn(`[Google Finance] Alternate failed for ${altQuerySymbol}:`, err.message);
+      console.log(`[Google Finance] Alternate notice for ${altQuerySymbol}:`, err.message);
     }
   }
 
@@ -337,7 +337,7 @@ async function fetchGoogleFinance(querySymbol) {
   throw new Error(`Google Finance price not found or validation failed for ${querySymbol}`);
 }
 
-// Helper to fetch price from Yahoo Finance
+// Helper to fetch price with multi-engine fallback (Nasdaq API -> Google Finance -> Yahoo Finance)
 async function getStockPrice(symbol) {
   const normalizedSymbol = symbol.trim().toUpperCase();
   const cached = priceCache.get(normalizedSymbol);
@@ -347,21 +347,39 @@ async function getStockPrice(symbol) {
     return cached.data;
   }
 
-  // Try Google Finance first
-  try {
-    const googleInfo = await getStockPriceGoogle(normalizedSymbol);
-    priceCache.set(normalizedSymbol, {
-      timestamp: now,
-      data: googleInfo
-    });
-    return googleInfo;
-  } catch (googleErr) {
-    console.warn(`[Price Engine] Google Finance failed for ${symbol}, falling back to Yahoo:`, googleErr.message);
+  const isUsStock = !normalizedSymbol.includes('.');
+
+  // 1. For US stocks, use Nasdaq API FIRST (cloud IP friendly, zero rate limits, sub-second latency)
+  if (isUsStock) {
+    try {
+      const nasdaqInfo = await getStockPriceNasdaq(normalizedSymbol);
+      if (nasdaqInfo && nasdaqInfo.price !== null) {
+        priceCache.set(normalizedSymbol, {
+          timestamp: now,
+          data: nasdaqInfo
+        });
+        return nasdaqInfo;
+      }
+    } catch (nasdaqErr) {
+      console.log(`[Price Engine] Nasdaq API query for ${symbol}: ${nasdaqErr.message}. Trying alternatives...`);
+    }
   }
 
-  // Stagger requests to avoid concurrent burst rate limits on cloud IP
-  await new Promise(resolve => setTimeout(resolve, Math.random() * 600));
+  // 2. Try Google Finance as secondary
+  try {
+    const googleInfo = await getStockPriceGoogle(normalizedSymbol);
+    if (googleInfo && googleInfo.price !== null) {
+      priceCache.set(normalizedSymbol, {
+        timestamp: now,
+        data: googleInfo
+      });
+      return googleInfo;
+    }
+  } catch (googleErr) {
+    console.log(`[Price Engine] Google Finance notice for ${symbol}: ${googleErr.message}`);
+  }
 
+  // 3. Try Yahoo Finance as tertiary
   const hosts = [
     'query1.finance.yahoo.com',
     'query2.finance.yahoo.com'
@@ -409,28 +427,18 @@ async function getStockPrice(symbol) {
 
       return stockInfo;
     } catch (error) {
-      console.warn(`Yahoo Finance query on ${host} failed for ${symbol}:`, error.message);
+      console.log(`[Price Engine] Yahoo Finance on ${host} notice for ${symbol}: ${error.message}`);
       lastError = error;
     }
   }
 
-  // Fallback to Nasdaq API if both Yahoo Finance hosts fail
-  console.warn(`All Yahoo Finance hosts failed for ${symbol}. Trying Nasdaq API fallback...`);
-  try {
-    const stockInfo = await getStockPriceNasdaq(normalizedSymbol);
-    priceCache.set(normalizedSymbol, {
-      timestamp: now,
-      data: stockInfo
-    });
-    return stockInfo;
-  } catch (nasdaqError) {
-    console.error(`Nasdaq fallback also failed for ${symbol}:`, nasdaqError.message);
-    if (cached) {
-      console.log(`Using stale cache for ${symbol} as fallback.`);
-      return cached.data;
-    }
-    throw new Error(`Failed to fetch stock price for ${symbol}: ${lastError?.message || nasdaqError.message}`);
+  // 4. If all failed, return stale cache if available
+  if (cached) {
+    console.log(`[Price Engine] Using stale cache for ${symbol} as fallback.`);
+    return cached.data;
   }
+
+  throw new Error(`Failed to fetch stock price for ${symbol}: ${lastError?.message || 'all sources exhausted'}`);
 }
 
 // Bulk fetch stock prices from Yahoo Finance Spark API (fast, handles multiple symbols, rate-limit proof)
@@ -609,7 +617,7 @@ app.get('/api/fcns', async (req, res) => {
           try {
             bulkResults = await fetchBulkStockPrices(symbolsToFetch);
           } catch (bulkError) {
-            console.warn('[Background Fetch] Bulk revalidation failed (will use fallback):', bulkError.message);
+            console.log('[Background Fetch] Bulk revalidation notice (will use individual engine):', bulkError.message);
           }
           
           // Populate cache for successfully fetched symbols
