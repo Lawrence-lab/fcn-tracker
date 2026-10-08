@@ -76,12 +76,24 @@ You are a professional structured financial product assistant. Analyze this FCN 
 CRITICAL PURCHASE YEAR & DATE RULES:
 1. The user ALWAYS inputs/uploads the FCN/DAC contract IMMEDIATELY upon purchasing it. Therefore, the contract's purchase/trade date year is ALWAYS the CURRENT YEAR (${currentYear}).
 2. NEVER use a past year (such as ${currentYear - 1} or earlier) for tradeDate or startDate.
-   - E.g. If the sheet says "9月30日", parse tradeDate and startDate as "${currentYear}-09-30".
-3. Calculate all observationDates, couponPaymentDates, and maturityDate starting from tradeDate in ${currentYear}:
-   - Months that are equal to or after the tradeDate month belong to ${currentYear} (e.g. 10月 -> ${currentYear}-10, 11月 -> ${currentYear}-11, 12月 -> ${currentYear}-12).
-   - Months that roll over past December (e.g. 1月, 2月, ..., up to the contract term) MUST advance to the next year: ${currentYear + 1} (or ${currentYear + 2} for multi-year contracts).
-   - E.g. A 12M contract traded on September 30, ${currentYear}: final valuation in October is ${currentYear + 1}-10-07, maturity payment is ${currentYear + 1}-10-13!
-4. Evaluation Type Detection:
+3. HOW TO IDENTIFY TRADE DATE & START DATE:
+   - In bank confirmation tables (e.g., DBS/星展), the cell labeled "日期" (Date) represents the Trade Date (tradeDate) and Start Date (startDate)!
+   - E.g. If the table has a header "日期" with value "10月5日", extract:
+     "tradeDate": "${currentYear}-10-05",
+     "startDate": "${currentYear}-10-05"
+   - NEVER return "01-01" or January 1st when "日期" is visible in the table.
+4. HOW TO IDENTIFY OBSERVATION & PAYMENT DATES:
+   - "比價日" and "最終評價日" MUST both be included in "observationDates".
+     E.g. If "比價日: 11月13日" and "最終評價日: 12月14日", then:
+     "observationDates": ["${currentYear}-11-13", "${currentYear}-12-14"]
+   - "配息日" lists all payment dates.
+     E.g. If "配息日: 11月18日, 12月17日", then:
+     "couponPaymentDates": ["${currentYear}-11-18", "${currentYear}-12-17"]
+   - "到期日期" (maturityDate): extract the final valuation date or maturity payment date (e.g. "${currentYear}-12-14" or "${currentYear}-12-17").
+5. Calculate all dates starting from tradeDate in ${currentYear}:
+   - Months equal to or after the tradeDate month belong to ${currentYear}.
+   - Months that roll over past December into January, February, etc. MUST advance to the next year: ${currentYear + 1}.
+6. Evaluation Type Detection:
    - If the product name starts with "DAC" or mentions Daily Auto-Call, set "evaluationType": "daily".
    - If the contract has step-down KO barriers, set "evaluationType": "stepdown".
    - Otherwise, set "evaluationType": "monthly".
@@ -96,12 +108,12 @@ Output JSON structure:
   "couponFrequency": "Monthly" or "Quarterly",
   "observationFrequency": "Monthly" or "Quarterly",
   "evaluationType": "monthly" or "daily" or "stepdown",
-  "tradeDate": "YYYY-MM-DD" (MUST be year ${currentYear}),
-  "startDate": "YYYY-MM-DD" (MUST be year ${currentYear}),
-  "maturityDate": "YYYY-MM-DD" (E.g. if final valuation date is March 1st and it crosses into next year, parse as ${currentYear + 1}-03-01),
-  "lockInMonths": number (E.g. closed period / lock-in period in months. If 4-month closed period, parse as 4. If not specified or standard 1-month, parse as 1),
-  "observationDates": ["YYYY-MM-DD", "YYYY-MM-DD", ...], (Calculate the years starting from tradeDate ${currentYear}),
-  "couponPaymentDates": ["YYYY-MM-DD", "YYYY-MM-DD", ...], (Calculate the years starting from tradeDate ${currentYear}),
+  "tradeDate": "YYYY-MM-DD" (from "日期" or "交易日", MUST be year ${currentYear}),
+  "startDate": "YYYY-MM-DD" (from "日期" or "起息日", MUST be year ${currentYear}),
+  "maturityDate": "YYYY-MM-DD" (from "最終評價日" or last payment date),
+  "lockInMonths": number (E.g. closed period / lock-in period in months. Default 1),
+  "observationDates": ["YYYY-MM-DD", ...], (MUST include all "比價日" and "最終評價日"),
+  "couponPaymentDates": ["YYYY-MM-DD", ...], (MUST include all "配息日"),
   "stocks": [
     {
       "symbol": "TSM",
@@ -184,18 +196,41 @@ Important Rules for stock calculations:
           return null;
         }
 
-        // 1. Force tradeDate to use currentYear (user enters immediately upon purchase)
-        let tradeMd = extractMonthDay(data.tradeDate);
+        // 1. Resolve trade date checking all possible alias properties
+        let rawTrade = data.tradeDate || data.startDate || data.date || data.pricingDate || data.issueDate || data.contractDate || data.trade_date;
+        let tradeMd = extractMonthDay(rawTrade);
         let startMonth = 1;
+
         if (tradeMd) {
           data.tradeDate = `${curYear}-${tradeMd.formatted}`;
           startMonth = tradeMd.month;
         } else {
-          data.tradeDate = `${curYear}-01-01`;
+          // If trade date was not directly found, infer from first observation or payment date (typically ~1 month prior)
+          const firstFuture = (data.observationDates && data.observationDates[0]) || (data.couponPaymentDates && data.couponPaymentDates[0]);
+          const futureMd = extractMonthDay(firstFuture);
+          if (futureMd) {
+            const lockMonths = Number(data.lockInMonths) || 1;
+            let inferredMonth = futureMd.month - lockMonths;
+            let inferredYear = curYear;
+            if (inferredMonth <= 0) {
+              inferredMonth += 12;
+              inferredYear -= 1;
+            }
+            startMonth = inferredMonth;
+            data.tradeDate = `${inferredYear}-${String(inferredMonth).padStart(2, '0')}-${String(futureMd.day).padStart(2, '0')}`;
+          } else {
+            // Default to today's date instead of January 1st
+            const now = new Date();
+            const nowM = now.getMonth() + 1;
+            const nowD = now.getDate();
+            startMonth = nowM;
+            data.tradeDate = `${curYear}-${String(nowM).padStart(2, '0')}-${String(nowD).padStart(2, '0')}`;
+          }
         }
 
-        // 2. startDate: use currentYear (unless month < startMonth)
-        let startMd = extractMonthDay(data.startDate);
+        // 2. startDate: use rawStartDate or fallback to tradeDate
+        let rawStart = data.startDate || rawTrade;
+        let startMd = extractMonthDay(rawStart);
         if (startMd) {
           const startYear = startMd.month < startMonth ? curYear + 1 : curYear;
           data.startDate = `${startYear}-${startMd.formatted}`;
@@ -226,9 +261,23 @@ Important Rules for stock calculations:
           data.couponPaymentDates = fixDateList(data.couponPaymentDates);
         }
 
-        // 4. Fix maturityDate
-        if (data.maturityDate) {
-          const matMd = extractMonthDay(data.maturityDate);
+        // 4. Ensure final valuation date is included in observationDates if missing
+        const rawMaturity = data.maturityDate || data.finalValuationDate || data.finalObservationDate;
+        if (rawMaturity && Array.isArray(data.observationDates) && Array.isArray(data.couponPaymentDates)) {
+          if (data.observationDates.length < data.couponPaymentDates.length) {
+            const matMd = extractMonthDay(rawMaturity);
+            if (matMd) {
+              const formattedMat = `${curYear}-${matMd.formatted}`;
+              if (!data.observationDates.some(d => d.includes(matMd.formatted))) {
+                data.observationDates.push(formattedMat);
+              }
+            }
+          }
+        }
+
+        // 5. Fix maturityDate
+        if (rawMaturity) {
+          const matMd = extractMonthDay(rawMaturity);
           if (matMd) {
             let matYear = curYear;
             if (data.couponPaymentDates && data.couponPaymentDates.length > 0) {
@@ -242,7 +291,7 @@ Important Rules for stock calculations:
           }
         }
 
-        // 5. Smart evaluationType detection if not explicitly specified
+        // 6. Smart evaluationType detection if not explicitly specified
         if (!data.evaluationType || data.evaluationType === 'monthly') {
           if (data.name && data.name.toUpperCase().startsWith('DAC')) {
             data.evaluationType = 'daily';
